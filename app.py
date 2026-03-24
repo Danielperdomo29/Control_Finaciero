@@ -381,18 +381,38 @@ with tab1:
         fig.update_layout(**PLOTLY_LAYOUT, height=320, barmode='group', yaxis_title='Monto ($)')
         st.plotly_chart(fig, use_container_width=True)
 
-    # --- ALERTS ---
+    # --- INTERACTIVE ALERTS ---
     st.markdown("---")
-    st.markdown("#### <i class='fas fa-bell section-title'></i> Alertas y Recomendaciones", unsafe_allow_html=True)
+
+    # Initialize dismissed alerts in session state
+    if 'dismissed_alerts' not in st.session_state:
+        st.session_state.dismissed_alerts = set()
+
+    # Generate alerts with IDs
     alerts = []
+    now_str = datetime.now().strftime('%H:%M')
+
     if not df_pagos.empty:
         hoy = datetime.now().date()
         futuros = df_pagos[df_pagos['Fecha'].notna() & (df_pagos['Fecha'].dt.date > hoy)]
         if not futuros.empty:
-            alerts.append(('warning', f"<i class='fas fa-calendar-day'></i> Hay <b>{len(futuros)}</b> pagos programados por <b>{fmt_money(futuros['Valor Neto'].sum())}</b>"))
+            alerts.append({
+                'id': 'future_payments',
+                'type': 'info',
+                'icon': 'fa-calendar-day',
+                'title': 'Pagos Programados',
+                'msg': f'Hay <b>{len(futuros)}</b> pagos programados por un total de <b>{fmt_money(futuros["Valor Neto"].sum())}</b>. Verifique las fechas de vencimiento.',
+            })
         prox = df_pagos[(df_pagos['Fecha'].notna()) & (df_pagos['Fecha'].dt.date > hoy) & (df_pagos['Fecha'].dt.date <= hoy + timedelta(days=30))]
         if not prox.empty:
-            alerts.append(('danger', f"<i class='fas fa-exclamation-circle'></i> <b>{len(prox)}</b> pagos vencen en 30 días por <b>{fmt_money(prox['Valor Neto'].sum())}</b>"))
+            alerts.append({
+                'id': 'urgent_30d',
+                'type': 'danger',
+                'icon': 'fa-exclamation-triangle',
+                'title': 'Pagos Urgentes (30 dias)',
+                'msg': f'<b>{len(prox)}</b> pagos vencen en los proximos 30 dias por <b>{fmt_money(prox["Valor Neto"].sum())}</b>. Requiere atencion inmediata.',
+            })
+
     if totals_cp:
         for cat, presup in totals_cp.items():
             if presup > 0:
@@ -400,19 +420,101 @@ with tab1:
                 if real > 0:
                     p = real / presup * 100
                     if p > 100:
-                        alerts.append(('danger', f"<i class='fas fa-triangle-exclamation'></i> <b>{cat}</b>: {p:.0f}% — supera presupuesto"))
+                        alerts.append({
+                            'id': f'over_{cat}',
+                            'type': 'danger',
+                            'icon': 'fa-triangle-exclamation',
+                            'title': f'{cat} — Sobrepresupuesto',
+                            'msg': f'Ejecucion al <b>{p:.0f}%</b> (${real:,.0f} de ${presup:,.0f}). Se ha excedido el presupuesto asignado.',
+                        })
                     elif p > 90:
-                        alerts.append(('warning', f"<i class='fas fa-bolt'></i> <b>{cat}</b>: {p:.0f}% — cerca del límite"))
+                        alerts.append({
+                            'id': f'near_{cat}',
+                            'type': 'warning',
+                            'icon': 'fa-bolt',
+                            'title': f'{cat} — Cerca del Limite',
+                            'msg': f'Ejecucion al <b>{p:.0f}%</b>. Queda <b>{fmt_money(presup - real)}</b> disponible.',
+                        })
+
     if pct_ejec > 0:
         if pct_ejec > 90:
-            alerts.append(('warning', f"<i class='fas fa-gauge-high'></i> Ejecución al <b>{pct_ejec:.1f}%</b> — presupuesto casi agotado"))
+            alerts.append({
+                'id': 'exec_high',
+                'type': 'warning',
+                'icon': 'fa-gauge-high',
+                'title': 'Presupuesto Casi Agotado',
+                'msg': f'Ejecucion general al <b>{pct_ejec:.1f}%</b>. Queda <b>{fmt_money(disponible)}</b> disponible.',
+            })
         elif pct_ejec < 30:
-            alerts.append(('success', f"<i class='fas fa-check-circle'></i> Ejecución al <b>{pct_ejec:.1f}%</b> — amplio margen presupuestal"))
-    if not alerts:
-        st.markdown('<div class="alert-box success"><i class="fas fa-check-circle"></i> Todo normal. Sin alertas activas.</div>', unsafe_allow_html=True)
+            alerts.append({
+                'id': 'exec_ok',
+                'type': 'success',
+                'icon': 'fa-check-circle',
+                'title': 'Ejecucion Saludable',
+                'msg': f'Ejecucion al <b>{pct_ejec:.1f}%</b>. Amplio margen presupuestal con <b>{fmt_money(disponible)}</b> disponible.',
+            })
+
+    # Add insight alerts
+    if not df_f.empty:
+        top_prov = df_f.groupby('Proveedor')['Valor Neto'].sum()
+        if not top_prov.empty:
+            top_name = top_prov.idxmax()
+            top_val = top_prov.max()
+            top_pct = (top_val / total_pagado * 100) if total_pagado > 0 else 0
+            if top_pct > 30:
+                alerts.append({
+                    'id': 'concentration',
+                    'type': 'info',
+                    'icon': 'fa-magnifying-glass-chart',
+                    'title': 'Concentracion de Pagos',
+                    'msg': f'<b>{top_name[:30]}</b> concentra el <b>{top_pct:.0f}%</b> del total pagado ({fmt_money(top_val)}). Considere diversificar proveedores.',
+                })
+
+    # Filter out dismissed alerts
+    visible_alerts = [a for a in alerts if a['id'] not in st.session_state.dismissed_alerts]
+    total_alerts = len(alerts)
+    dismissed_count = total_alerts - len(visible_alerts)
+
+    # Header with counter
+    counter_class = 'clear' if not visible_alerts else ''
+    counter_text = f'{len(visible_alerts)} activa{"s" if len(visible_alerts) != 1 else ""}' if visible_alerts else 'Sin alertas'
+    st.markdown(f'''<div class="alerts-header">
+        <span style="font-size:1rem; color:#e0f2e0;"><i class="fas fa-bell" style="margin-right:8px; color:#81c784;"></i> <b>Alertas y Recomendaciones</b></span>
+        <span class="alerts-counter {counter_class}"><i class="fas fa-circle-dot" style="font-size:0.5rem; margin-right:4px;"></i> {counter_text}</span>
+    </div>''', unsafe_allow_html=True)
+
+    if not visible_alerts:
+        st.markdown('''<div class="alert-toast success" style="border-left-color:#4caf50;">
+            <div class="at-badge success"><i class="fas fa-shield-check"></i></div>
+            <div class="at-content">
+                <div class="at-title">Todo en orden</div>
+                <div class="at-msg">No hay alertas activas. El estado financiero del proyecto se encuentra dentro de los parametros normales.</div>
+            </div>
+        </div>''', unsafe_allow_html=True)
     else:
-        for typ, msg in alerts:
-            st.markdown(f'<div class="alert-box {typ}">{msg}</div>', unsafe_allow_html=True)
+        for i, alert in enumerate(visible_alerts):
+            # Render the alert toast
+            st.markdown(f'''<div class="alert-toast {alert["type"]}" style="animation-delay:{i*0.1}s;">
+                <div class="at-badge {alert["type"]}"><i class="fas {alert["icon"]}"></i></div>
+                <div class="at-content">
+                    <div class="at-title">{alert["title"]}</div>
+                    <div class="at-msg">{alert["msg"]}</div>
+                    <div class="at-time"><i class="far fa-clock" style="margin-right:4px;"></i> Hoy {now_str}</div>
+                </div>
+            </div>''', unsafe_allow_html=True)
+
+            # Dismiss button (Streamlit native — updates session state)
+            if st.button(f"Cerrar", key=f"dismiss_{alert['id']}", type="secondary"):
+                st.session_state.dismissed_alerts.add(alert['id'])
+                st.rerun()
+
+    # Show restore option if any alerts were dismissed
+    if dismissed_count > 0:
+        col_restore, _ = st.columns([1, 3])
+        with col_restore:
+            if st.button(f"Restaurar {dismissed_count} alerta{'s' if dismissed_count > 1 else ''}", type="secondary"):
+                st.session_state.dismissed_alerts.clear()
+                st.rerun()
 
     # --- DETAIL TABLES ---
     st.markdown("---")
