@@ -1,0 +1,29 @@
+# Config files
+.streamlit/secrets.toml
+secrets.toml
+
+# Data files
+datos/
+*.xlsx
+!requirements.txt
+
+# Logs
+audit_log.jsonl
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
