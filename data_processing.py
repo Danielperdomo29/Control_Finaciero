@@ -225,28 +225,58 @@ def process_payments(data):
 
 
 def extract_gastos_cp_totals(data):
-    """Extract category totals from GASTOS CP summary sheet."""
+    """Extract category totals from GASTOS CP summary sheet.
+
+    Handles the real format where categories appear as:
+      DESCRIPCION column: A. PERSONAL, B. PAGO DE INCENTIVOS, etc.
+      Or TOTAL rows: TOTAL COSTOS DE PERSONAL, TOTAL INCENTIVOS, etc.
+    """
     if 'gastos_cp' not in data:
         return {}
     df = data['gastos_cp']
     totals = {}
+
+    # Mapping: keyword found in cell → dashboard category name
+    # Supports both "TOTAL X" summary rows and "A. PERSONAL" description rows
     keywords = {
+        # TOTAL rows (original format)
         'TOTAL COSTOS DE PERSONAL': 'Personal',
         'TOTAL INCENTIVOS': 'Incentivos',
         'TOTAL COSTOS SERVICIOS BANCARIOS': 'Comisiones bancarias',
         'TOTAL DINAMIZADORES': 'Dinamizadores',
         'TOTAL VIATICOS': 'Gastos de viaje',
+        'TOTAL GASTOS DEL PROYECTO': 'Total Proyecto',
         'VALOR IMPUESTOS': 'Impuestos',
+        # DESCRIPCION rows (real format from image)
+        'A. PERSONAL': 'Personal',
+        'B. PAGO DE INCENTIVOS': 'Incentivos',
+        'C. PAGO SERVICIOS BANCARIOS': 'Comisiones bancarias',
+        'D. PAGO A DINAMIZADORES': 'Dinamizadores',
+        'E. PAGO DE VIATICOS': 'Gastos de viaje',
+        'F. PAGO DE IMPUESTOS': 'Impuestos',
     }
+
     for idx, row in df.iterrows():
-        cell0 = str(row.iloc[0]).strip().upper() if pd.notna(row.iloc[0]) else ''
-        for kw, cat in keywords.items():
-            if kw in cell0:
-                for c in range(1, min(8, len(row))):
-                    v = row.iloc[c]
-                    if isinstance(v, (int, float)) and not pd.isna(v) and v != 0:
-                        totals[cat] = v
-                        break
+        # Check first two columns for keywords (some sheets use col 0, others col 1)
+        for col_idx in range(min(2, len(row))):
+            cell = str(row.iloc[col_idx]).strip().upper() if pd.notna(row.iloc[col_idx]) else ''
+            if not cell:
+                continue
+            for kw, cat in keywords.items():
+                if kw in cell:
+                    # Find first numeric value in the row (scan cols 1-10)
+                    for c in range(1, min(11, len(row))):
+                        v = row.iloc[c]
+                        if isinstance(v, (int, float)) and not pd.isna(v) and v != 0:
+                            # Keep the largest value if category already found
+                            # (TOTAL rows override individual rows)
+                            if cat not in totals or ('TOTAL' in kw and cat in totals):
+                                totals[cat] = v
+                            break
+                    break  # Stop checking keywords for this cell
+
+    # Remove "Total Proyecto" from display (it's the grand total, not a category)
+    totals.pop('Total Proyecto', None)
     return totals
 
 

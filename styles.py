@@ -148,6 +148,17 @@ div[data-testid="stExpander"] { border: 1px solid rgba(46,125,50,0.2); border-ra
 .login-container h2 { color: #81c784; text-align: center; margin-bottom: 0.3rem; }
 .login-container p { color: #a5d6a7; text-align: center; font-size: 0.85rem; margin-bottom: 1.5rem; }
 .login-logo { text-align: center; font-size: 3rem; color: #66bb6a; margin-bottom: 1rem; }
+/* ---- Privacy Banner ---- */
+.privacy-banner {
+    background: rgba(20, 40, 20, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(46,125,50,0.25);
+    border-radius: 12px; padding: 0.8rem 1.2rem;
+    margin-bottom: 1rem; display: flex; align-items: center; gap: 12px;
+}
+.privacy-banner .pb-icon { font-size: 1.3rem; color: #66bb6a; flex-shrink: 0; }
+.privacy-banner .pb-text { font-size: 0.72rem; color: #a5d6a7; line-height: 1.4; }
+.privacy-banner .pb-text b { color: #81c784; }
 </style>
 """
 
@@ -157,5 +168,18 @@ LOGIN_HEADER = """
     <div class="login-logo"><i class="fas fa-leaf"></i></div>
     <h2>CONSERVAR PAGA</h2>
     <p>Dashboard de Control Financiero</p>
+</div>
+"""
+
+# ==================== PRIVACY BANNER ====================
+PRIVACY_BANNER = """
+<div class="privacy-banner">
+    <div class="pb-icon"><i class="fas fa-shield-halved"></i></div>
+    <div class="pb-text">
+        <b>Datos 100% Confidenciales</b> — La información financiera cargada en este sistema se procesa
+        exclusivamente en memoria de sesión y <b>no se almacena, copia ni transmite a terceros</b>.
+        Sus datos están protegidos bajo los principios de Confidencialidad, Integridad y Disponibilidad.
+        Al cerrar sesión, los datos se eliminan completamente.
+    </div>
 </div>
 """
