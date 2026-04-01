@@ -361,3 +361,69 @@ def get_ingresos_summary(data):
         concepto = r.get(col_concepto, '') if col_concepto else ''
         rows.append({'Fecha': fecha, 'Concepto': str(concepto).strip(), 'Valor': val})
     return pd.DataFrame(rows)
+
+# ==================== ADVANCED ANALYTICS ENGINE ====================
+
+def normalize_category(cat: str) -> str:
+    """Limpieza de categorias."""
+    return " ".join(str(cat).strip().upper().split())
+
+def normalize_text(val: str) -> str:
+    """Limpieza de contratistas/nombres."""
+    if pd.isna(val):
+        return "DESCONOCIDO"
+    return " ".join(str(val).strip().upper().split())
+
+def normalize_date(val):
+    """Normaliza fechas a datetime.date."""
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, pd.Timestamp):
+        return val.date()
+    if isinstance(val, str):
+        try:
+            return datetime.strptime(val[:10], '%Y-%m-%d').date()
+        except Exception:
+            pass
+    return pd.NaT
+
+import streamlit as st
+@st.cache_data(show_spinner=False)
+def build_analytics_cube(df_pagos: pd.DataFrame, df_ingresos: pd.DataFrame) -> pd.DataFrame:
+    """Builds a normalized, aggregated cube for fast filtering."""
+    rows = []
+    
+    # Process EGRESOS
+    if not df_pagos.empty:
+        for _, r in df_pagos.iterrows():
+            d = normalize_date(r['Fecha'])
+            if pd.isna(d):
+                continue
+            rows.append({
+                'contractor': normalize_text(r['Proveedor']),
+                'category': normalize_category(r['Categoría']),
+                'type': 'EGRESO',
+                'date': d,
+                'amount': float(r['Valor Neto']),
+                'year': d.year,
+                'month': d.month,
+            })
+            
+    # Process INGRESOS
+    if not df_ingresos.empty:
+        for _, r in df_ingresos.iterrows():
+            d = normalize_date(r['Fecha'])
+            if pd.isna(d):
+                continue
+            rows.append({
+                'contractor': normalize_text(r['Concepto']),
+                'category': 'INGRESOS PROYECTO',
+                'type': 'INGRESO',
+                'date': d,
+                'amount': float(r['Valor']),
+                'year': d.year,
+                'month': d.month,
+            })
+            
+    df_cube = pd.DataFrame(rows)
+    return df_cube

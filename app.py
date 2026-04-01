@@ -15,7 +15,8 @@ from auth import is_authenticated, show_login_form, logout
 from security import hash_file, audit_log, validate_excel_structure, validate_upload
 from data_processing import (
     load_excel, process_payments, extract_gastos_cp_totals,
-    get_monthly_balances, get_fiducoldex_cashflow, get_ingresos_summary, fmt_money
+    get_monthly_balances, get_fiducoldex_cashflow, get_ingresos_summary, fmt_money,
+    build_analytics_cube
 )
 
 # ==================== PAGE CONFIG ====================
@@ -92,6 +93,9 @@ df_balances = get_monthly_balances(data)
 df_cashflow = get_fiducoldex_cashflow(data)
 df_ingresos = get_ingresos_summary(data)
 
+# Analytics Engine (Cube)
+df_cube = build_analytics_cube(df_pagos, df_ingresos)
+
 # ==================== HEADER ====================
 st.markdown("""
 <div class="header-bar">
@@ -133,6 +137,8 @@ with st.sidebar:
 
 # ==================== APPLY FILTERS ====================
 df_f = df_pagos.copy()
+df_cube_f = df_cube.copy()
+
 if not df_f.empty:
     if date_range and len(date_range) == 2:
         mask = df_f['Fecha'].notna()
@@ -141,6 +147,20 @@ if not df_f.empty:
         df_f = df_f[df_f['Categoría'].isin(selected_cats)]
     if selected_proveedores and len(selected_proveedores) < len(all_proveedores):
         df_f = df_f[df_f['Proveedor'].isin(selected_proveedores)]
+
+if not df_cube_f.empty:
+    if date_range and len(date_range) == 2:
+        mask_c = df_cube_f['date'].notna()
+        df_cube_f = df_cube_f[mask_c & (df_cube_f['date'] >= date_range[0]) & (df_cube_f['date'] <= date_range[1])]
+    # Note: df_cube_f['category'] uses the normalized categories, but for simplicity we match the sidebar selection.
+    # The user wanted a flexible Category/Contractor filter.
+    if selected_cats:
+        # Match using str.contains so we get a flexible match
+        pattern_cat = '|'.join(selected_cats).upper()
+        df_cube_f = df_cube_f[df_cube_f['category'].str.contains(pattern_cat, na=False)]
+    if selected_proveedores and len(selected_proveedores) < len(all_proveedores):
+        pattern_prov = '|'.join([p.upper() for p in selected_proveedores])
+        df_cube_f = df_cube_f[df_cube_f['contractor'].str.contains(pattern_prov, na=False)]
 
 # ==================== COMPUTE METRICS ====================
 total_pagado = df_f['Valor Neto'].sum() if not df_f.empty else 0
@@ -170,7 +190,7 @@ except Exception:
     ratio_efectivo = 0.0
 
 # ==================== TABS ====================
-tab1, tab2 = st.tabs(["📊 Panel General", "📈 Estado de Resultados"])
+tab1, tab2, tab3 = st.tabs(["📊 Panel General", "📈 Estado de Resultados", "🔍 Análisis Avanzado"])
 
 # ================================================================
 #                    TAB 1: PANEL GENERAL
@@ -683,6 +703,66 @@ with tab2:
             <div class="metric-label">Punto de Equilibrio</div>
             <div class="metric-value">{fmt_money(punto_equilibrio)}</div>
         </div>''', unsafe_allow_html=True)
+
+# ================================================================
+#                    TAB 3: ANÁLISIS AVANZADO
+# ================================================================
+with tab3:
+    st.markdown("<div style='margin-bottom:1rem;'><h3 style='color:#4caf50;'><i class='fas fa-search-dollar' style='margin-right:8px;'></i> Motor Analítico: Filtros Avanzados</h3></div>", unsafe_allow_html=True)
+    
+    if df_cube_f.empty:
+        st.info("No hay datos para los filtros seleccionados.")
+    else:
+        st.markdown("<div style='font-size:0.9rem; color:#a5d6a7; margin-bottom:1rem;'>Mostrando información consolidada y normalizada según los filtros aplicados en la barra lateral.</div>", unsafe_allow_html=True)
+        
+        # 1. Tabla de Detalle Mensual (Agrupada por Contratista y Mes)
+        st.markdown("<h4 style='color:#e0f2e0; margin-top:1rem;'>Detalle Mensual por Contratista</h4>", unsafe_allow_html=True)
+        detail = df_cube_f.groupby(['contractor', 'year', 'month', 'category', 'type'])['amount'].sum().reset_index()
+        detail['Mes'] = detail.apply(lambda r: f"{int(r['year'])}-{int(r['month']):02d}", axis=1)
+        detail = detail[['contractor', 'Mes', 'category', 'type', 'amount']].sort_values(['contractor', 'Mes'])
+        detail.columns = ['Contratista', 'Mes', 'Categoría', 'Tipo', 'Total']
+        
+        # Formatear montos para la tabla
+        detail_disp = detail.copy()
+        detail_disp['Total'] = detail_disp['Total'].apply(lambda x: f"${x:,.2f}")
+        st.dataframe(detail_disp, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        
+        # 2. Consolidados por Categoría y Tipo
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("<h4 style='color:#e0f2e0;'>Consolidado por Categoría</h4>", unsafe_allow_html=True)
+            cons_cat = df_cube_f.groupby(['category', 'type'])['amount'].sum().reset_index().sort_values('amount', ascending=False)
+            cons_cat.columns = ['Categoría', 'Tipo', 'Total']
+            
+            # Gráfico de dona para Egresos
+            egresos_cat = cons_cat[cons_cat['Tipo'] == 'EGRESO']
+            if not egresos_cat.empty:
+                fig_cat = px.pie(egresos_cat, values='Total', names='Categoría', hole=0.7, 
+                                 title='Distribución de Egresos', color_discrete_sequence=px.colors.sequential.Greens_r)
+                fig_cat.update_layout(**PLOTLY_LAYOUT)
+                st.plotly_chart(fig_cat, use_container_width=True)
+                
+            cons_cat_disp = cons_cat.copy()
+            cons_cat_disp['Total'] = cons_cat_disp['Total'].apply(lambda x: f"${x:,.2f}")
+            st.dataframe(cons_cat_disp, use_container_width=True, hide_index=True)
+            
+        with col2:
+            st.markdown("<h4 style='color:#e0f2e0;'>Ingresos vs Egresos</h4>", unsafe_allow_html=True)
+            cons_type = df_cube_f.groupby('type')['amount'].sum().reset_index()
+            cons_type.columns = ['Tipo', 'Total']
+            
+            if not cons_type.empty:
+                fig_type = px.bar(cons_type, x='Tipo', y='Total', color='Tipo', 
+                                  color_discrete_map={'INGRESO':'#43a047', 'EGRESO':'#e53935'},
+                                  text_auto='.2s', title='Balance Total')
+                fig_type.update_layout(**PLOTLY_LAYOUT)
+                st.plotly_chart(fig_type, use_container_width=True)
+                
+            cons_type_disp = cons_type.copy()
+            cons_type_disp['Total'] = cons_type_disp['Total'].apply(lambda x: f"${x:,.2f}")
+            st.dataframe(cons_type_disp, use_container_width=True, hide_index=True)
 
 # ==================== FOOTER ====================
 st.markdown("---")
