@@ -461,45 +461,52 @@ def get_financial_summary(df_cube: pd.DataFrame, filters: dict) -> dict:
         df = df[df['category'].str.contains(pattern, na=False)]
     
     if df.empty:
-        return {'detail': [], 'totals_by_category': [], 'monthly_by_category': [], 'kpis': {'ingresos': 0, 'egresos': 0, 'balance': 0}}
+        return {
+            'detail': [],
+            'totals_by_category': [],
+            'monthly_evolution': pd.DataFrame(),
+            'top_contractors': pd.DataFrame(),
+            'kpis': {'ingresos': 0, 'egresos': 0, 'balance': 0, 'ejecucion': 0}
+        }
     
-    # 1. Detalle mensual por contratista (tuplas como llaves)
-    detail_map = defaultdict(float)
-    for _, r in df.iterrows():
-        month_key = f"{int(r['year'])}-{int(r['month']):02d}"
-        key = (r['contractor'], month_key, r['category'], r['type'])
-        detail_map[key] += r['amount']
-    detail = [
-        {'contractor': k[0], 'month': k[1], 'category': k[2], 'type': k[3], 'total': v}
-        for k, v in detail_map.items()
-    ]
+    # 1. Detalle mensual por contratista (solo egresos)
+    detail_df = df[df['type'] == 'EGRESO'].groupby(['contractor', 'year', 'month', 'category'])['amount'].sum().reset_index()
+    detail_df['month_str'] = detail_df['year'].astype(str) + '-' + detail_df['month'].astype(str).str.zfill(2)
+    detail = detail_df.to_dict('records')
     
     # 2. Totales por categoria
-    cat_map = defaultdict(float)
-    for _, r in df.iterrows():
-        cat_map[(r['category'], r['type'])] += r['amount']
-    totals_by_category = [
-        {'category': k[0], 'type': k[1], 'total': v}
-        for k, v in cat_map.items()
-    ]
+    totals_df = df.groupby('category')['amount'].sum().reset_index()
+    totals_by_category = totals_df.to_dict('records')
     
-    # 3. Serie mensual por tipo (para grafico linea)
-    monthly_map = defaultdict(float)
-    for _, r in df.iterrows():
-        month_key = f"{int(r['year'])}-{int(r['month']):02d}"
-        monthly_map[(month_key, r['type'])] += r['amount']
-    monthly_by_category = [
-        {'month': k[0], 'type': k[1], 'total': v}
-        for k, v in monthly_map.items()
-    ]
+    # 3. Evolución mensual (ingresos vs egresos)
+    monthly_df = df.groupby(['year', 'month', 'type'])['amount'].sum().reset_index()
+    monthly_df['month_str'] = monthly_df['year'].astype(str) + '-' + monthly_df['month'].astype(str).str.zfill(2)
+    monthly_evolution = monthly_df.pivot(index='month_str', columns='type', values='amount').fillna(0).reset_index()
+    if 'INGRESO' not in monthly_evolution.columns:
+        monthly_evolution['INGRESO'] = 0.0
+    if 'EGRESO' not in monthly_evolution.columns:
+        monthly_evolution['EGRESO'] = 0.0
     
-    # 4. KPIs
+    # 4. Top contratistas (egresos)
+    top_contractors = df[df['type'] == 'EGRESO'].groupby('contractor')['amount'].sum().sort_values(ascending=False).reset_index()
+    top_contractors.columns = ['contractor', 'total']
+    
+    # 5. KPIs
     total_ingresos = float(df[df['type'] == 'INGRESO']['amount'].sum())
     total_egresos = float(df[df['type'] == 'EGRESO']['amount'].sum())
+    balance = total_ingresos - total_egresos
+    ejecucion = (total_egresos / total_ingresos * 100) if total_ingresos > 0 else 0
     kpis = {
         'ingresos': total_ingresos,
         'egresos': total_egresos,
-        'balance': total_ingresos - total_egresos
+        'balance': balance,
+        'ejecucion': ejecucion
     }
     
-    return {'detail': detail, 'totals_by_category': totals_by_category, 'monthly_by_category': monthly_by_category, 'kpis': kpis}
+    return {
+        'detail': detail,
+        'totals_by_category': totals_by_category,
+        'monthly_evolution': monthly_evolution,
+        'top_contractors': top_contractors,
+        'kpis': kpis
+    }

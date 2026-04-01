@@ -193,6 +193,105 @@ try:
 except Exception:
     ratio_efectivo = 0.0
 
+# ==================== EXECUTIVE CHARTS (Helpers) ====================
+def plot_donut(totals_by_category):
+    df = pd.DataFrame(totals_by_category)
+    if df.empty: return None
+    import plotly.express as px
+    fig = px.pie(df, values='amount', names='category', hole=0.6,
+                 color_discrete_sequence=px.colors.sequential.Greens_r)
+    fig.update_traces(textposition='inside', textinfo='percent+label',
+                      hovertemplate='<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}')
+    fig.update_layout(**PLOTLY_LAYOUT, showlegend=False, height=300, margin=dict(l=20, r=20, t=20, b=20))
+    return fig
+
+def plot_gauge(ejecucion):
+    import plotly.graph_objects as go
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = ejecucion,
+        title = {'text': "Ejecución Presupuestal"},
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        gauge = {
+            'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkgreen"},
+            'bar': {'color': "#2e7d32"},
+            'steps': [
+                {'range': [0, 30], 'color': "red"},
+                {'range': [30, 70], 'color': "yellow"},
+                {'range': [70, 100], 'color': "green"}],
+            'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': 90}}))
+    fig.update_layout(**PLOTLY_LAYOUT, height=250, margin=dict(l=20, r=20, t=40, b=20))
+    return fig
+
+def plot_monthly_evolution(monthly_evolution):
+    if monthly_evolution.empty: return None
+    import plotly.graph_objects as go
+    fig = go.Figure()
+    if 'INGRESO' in monthly_evolution.columns:
+        fig.add_trace(go.Scatter(x=monthly_evolution['month_str'], y=monthly_evolution['INGRESO'],
+                                 mode='lines+markers', name='Ingresos',
+                                 line=dict(color='#43a047', width=3),
+                                 fill='tozeroy', fillcolor='rgba(67,160,71,0.1)'))
+    if 'EGRESO' in monthly_evolution.columns:
+        fig.add_trace(go.Scatter(x=monthly_evolution['month_str'], y=monthly_evolution['EGRESO'],
+                                 mode='lines+markers', name='Egresos',
+                                 line=dict(color='#e53935', width=3),
+                                 fill='tozeroy', fillcolor='rgba(229,57,53,0.1)'))
+    fig.update_layout(**PLOTLY_LAYOUT, xaxis_title='Mes', yaxis_title='Monto ($)', height=400)
+    return fig
+
+def plot_stacked_bars(df_cube_f):
+    df = df_cube_f[df_cube_f['type'] == 'EGRESO'].copy()
+    if df.empty: return None
+    import plotly.express as px
+    df['month_str'] = df['year'].astype(str) + '-' + df['month'].astype(str).str.zfill(2)
+    grouped = df.groupby(['month_str', 'category'])['amount'].sum().reset_index()
+    pivot = grouped.pivot(index='month_str', columns='category', values='amount').fillna(0)
+    fig = px.bar(pivot, x=pivot.index, y=pivot.columns, labels={'value': 'Monto ($)', 'index': 'Mes'}, barmode='stack', color_discrete_sequence=COLORS)
+    fig.update_layout(**PLOTLY_LAYOUT, height=400, xaxis_tickangle=-45)
+    return fig
+
+def plot_pareto(top_contractors):
+    if top_contractors.empty: return None
+    import plotly.graph_objects as go
+    df = top_contractors.copy().head(15)
+    total = df['total'].sum()
+    if total <= 0: return None
+    df['cum_percent'] = df['total'].cumsum() / total * 100
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=df['contractor'], y=df['total'], name='Monto', marker_color='#81c784'))
+    fig.add_trace(go.Scatter(x=df['contractor'], y=df['cum_percent'], name='% Acumulado',
+                             yaxis='y2', mode='lines+markers', line=dict(color='#ff8a65', width=2)))
+    fig.update_layout(**PLOTLY_LAYOUT,
+        xaxis_title='Contratista',
+        yaxis_title='Monto ($)',
+        yaxis2=dict(title='% Acumulado', overlaying='y', side='right', range=[0, 110]),
+        height=400,
+        xaxis_tickangle=-45,
+        margin=dict(r=50)
+    )
+    return fig
+
+def plot_top_contractors(top_contractors, top_n=5):
+    if top_contractors.empty: return None
+    import plotly.express as px
+    df = top_contractors.head(top_n).copy()
+    df['label'] = df['contractor'].apply(lambda x: x[:20] + '...' if len(x) > 20 else x)
+    df = df.sort_values('total', ascending=True)
+    fig = px.bar(df, y='label', x='total', orientation='h', labels={'total': 'Monto ($)', 'label': 'Contratista'}, color='total', color_continuous_scale='Greens')
+    fig.update_layout(**PLOTLY_LAYOUT, height=400, margin=dict(l=0, r=0))
+    return fig
+
+def plot_cashflow(df_cashflow):
+    if df_cashflow.empty: return None
+    import plotly.express as px
+    fig = px.area(df_cashflow, x='Periodo', y='Saldo Proyectado', labels={'Saldo Proyectado': 'Saldo ($)'}, color_discrete_sequence=['#43a047'])
+    fig.update_layout(**PLOTLY_LAYOUT, height=350)
+    return fig
+
+# Generar el sumario global basado en datos filtrados
+summary = get_financial_summary(df_cube_f, {})
+
 # ==================== TABS ====================
 tab1, tab2, tab3 = st.tabs(["📊 Panel General", "📈 Estado de Resultados", "🔍 Análisis Avanzado"])
 
@@ -202,11 +301,11 @@ tab1, tab2, tab3 = st.tabs(["📊 Panel General", "📈 Estado de Resultados", "
 with tab1:
     # --- TOP KPI ROW ---
     kpi_data = [
-        ('fa-money-bill-wave', 'Total Pagado', fmt_money(total_pagado)),
-        ('fa-chart-line', 'Total Ingresos', fmt_money(total_ingresos)),
-        ('fa-coins', 'Saldo Disponible', fmt_money(disponible)),
+        ('fa-money-bill-wave', 'Total Pagado', fmt_money(summary['kpis']['egresos'])),
+        ('fa-chart-line', 'Total Ingresos', fmt_money(summary['kpis']['ingresos'])),
+        ('fa-coins', 'Saldo Disponible', fmt_money(summary['kpis']['balance'])),
         ('fa-university', 'Saldo Bancario', fmt_money(ultimo_saldo)),
-        ('fa-gauge-high', '% Ejecución', f'{pct_ejec:.1f}%'),
+        ('fa-gauge-high', '% Ejecución', f'{summary["kpis"]["ejecucion"]:.1f}%'),
         ('fa-clock', 'Ratio Efectivo', f'{ratio_efectivo:.1f} meses'),
     ]
     kpi_html = '<div class="kpi-row">'
@@ -218,198 +317,37 @@ with tab1:
         </div>'''
     kpi_html += '</div>'
     st.markdown(kpi_html, unsafe_allow_html=True)
-
-    # --- SUMMARY PANEL + TARGET CARDS + TOP PROVIDERS ---
-    col_summary, col_mid, col_right = st.columns([1.2, 1, 1.3])
-
-    with col_summary:
-        sub_metrics = [
-            ('fa-user-tie', 'green', 'pf-green', 'Contratistas P.N.', kpis.get('Contratistas P.N.', 0)),
-            ('fa-building', 'blue', 'pf-blue', 'Contratistas P.J.', kpis.get('Contratistas P.J.', 0)),
-            ('fa-file-invoice-dollar', 'orange', 'pf-orange', 'Impuestos', kpis.get('Impuestos', 0)),
-            ('fa-award', 'purple', 'pf-purple', 'Incentivos', kpis.get('Incentivos', 0)),
-            ('fa-university', 'green', 'pf-green', 'Comisiones', kpis.get('Comisiones bancarias', 0)),
-            ('fa-plane', 'red', 'pf-red', 'Gastos de Viaje', kpis.get('Gastos de viaje', 0)),
-        ]
-        subs_html = ''
-        for icon, color, pf, label, val in sub_metrics:
-            pct = (val / total_pagado * 100) if total_pagado > 0 else 0
-            subs_html += f'''<div class="sub-metric">
-                <div class="sm-icon {color}"><i class="fas {icon}"></i></div>
-                <div class="sm-info">
-                    <div class="sm-label">{label}</div>
-                    <div class="sm-val">{fmt_money(val)} <span class="sm-pct">{pct:.1f}%</span></div>
-                    <div class="progress-wrap"><div class="progress-fill {pf}" style="width:{min(pct,100):.1f}%"></div></div>
-                </div>
-            </div>'''
-        st.markdown(f'''<div class="summary-panel">
-            <div class="big-label"><i class="fas fa-wallet" style="margin-right:6px;"></i> Total Ejecutado del Periodo</div>
-            <div class="big-number">{fmt_money(total_pagado)}</div>
-            <div style="font-size:0.75rem; color:#a5d6a7; margin-bottom:0.8rem;">
-                Ejecución: <b>{pct_ejec:.1f}%</b> del presupuesto
-            </div>
-            <hr style="border-color:rgba(46,125,50,0.2); margin:0.5rem 0;">
-            {subs_html}
-        </div>''', unsafe_allow_html=True)
-
-    with col_mid:
-        st.markdown("<div style='font-size:0.85rem; color:#a5d6a7; margin-bottom:0.5rem;'><i class='fas fa-bullseye' style='margin-right:6px;'></i> <b>Cumplimiento de Metas</b></div>", unsafe_allow_html=True)
-        if totals_cp:
-            for cat, presup in totals_cp.items():
-                if presup > 0:
-                    real = df_f[df_f['Categoría'].str.contains(cat, case=False, na=False)]['Valor Neto'].sum() if not df_f.empty else 0
-                    diff = real - presup
-                    diff_pct = (diff / presup * 100) if presup > 0 else 0
-                    diff_cls = 'negative' if diff > 0 else 'positive'
-                    diff_icon = 'fa-arrow-up' if diff > 0 else 'fa-arrow-down'
-                    diff_sign = '+' if diff > 0 else ''
-                    st.markdown(f'''<div class="target-card">
-                        <div class="tc-label">{cat}</div>
-                        <div class="tc-val">{fmt_money(real)}</div>
-                        <div class="tc-diff {diff_cls}">
-                            <i class="fas {diff_icon}" style="font-size:0.6rem;"></i>
-                            Objetivo: {fmt_money(presup)} ({diff_sign}{diff_pct:.1f}%)
-                        </div>
-                    </div>''', unsafe_allow_html=True)
-        else:
-            st.markdown(f'''<div class="target-card">
-                <div class="tc-label">Ejecución General</div>
-                <div class="tc-val">{pct_ejec:.1f}%</div>
-                <div class="tc-diff positive"><i class="fas fa-check-circle" style="font-size:0.6rem;"></i> Margen: {fmt_money(disponible)}</div>
-            </div>''', unsafe_allow_html=True)
-
-        if total_ingresos > 0:
-            fig = go.Figure()
-            fig.add_trace(go.Pie(
-                values=[total_pagado, max(0, disponible)],
-                labels=['Egresos', 'Disponible'],
-                hole=0.6, marker_colors=['#ff8a65', '#43a047'],
-                textinfo='percent', textfont_size=11,
-                hovertemplate='<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}'
-            ))
-            donut_layout = {k: v for k, v in PLOTLY_LAYOUT.items() if k != 'margin'}
-            fig.update_layout(
-                **donut_layout, height=200, showlegend=True,
-                margin=dict(l=10, r=10, t=10, b=10),
-                annotations=[dict(text=f'{pct_ejec:.0f}%', x=0.5, y=0.5,
-                                  font_size=18, font_color='#81c784', showarrow=False)]
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col_right:
-        st.markdown("<div style='font-size:0.85rem; color:#a5d6a7; margin-bottom:0.5rem;'><i class='fas fa-ranking-star' style='margin-right:6px;'></i> <b>Principales Egresos</b></div>", unsafe_allow_html=True)
-        if not df_f.empty:
-            top_prov = df_f.groupby('Proveedor')['Valor Neto'].sum().sort_values(ascending=False).head(8)
-            max_val = top_prov.max() if not top_prov.empty else 1
-            bar_colors = ['#2e7d32', '#388e3c', '#43a047', '#4caf50', '#66bb6a', '#81c784', '#a5d6a7', '#c8e6c9']
-            hbars_html = ''
-            for i, (prov, val) in enumerate(top_prov.items()):
-                pct = (val / max_val * 100) if max_val > 0 else 0
-                pct_total = (val / total_pagado * 100) if total_pagado > 0 else 0
-                color = bar_colors[i % len(bar_colors)]
-                label = prov[:18] + '...' if len(prov) > 18 else prov
-                hbars_html += f'''<div class="hbar-item">
-                    <div class="hbar-label" title="{prov}">{label}</div>
-                    <div class="hbar-track"><div class="hbar-fill" style="width:{pct:.1f}%; background:{color};">{fmt_money(val)}</div></div>
-                    <div class="hbar-pct">{pct_total:.1f}%</div>
-                </div>'''
-            st.markdown(hbars_html, unsafe_allow_html=True)
-
-        st.markdown("<div style='font-size:0.85rem; color:#a5d6a7; margin:0.8rem 0 0.5rem;'><i class='fas fa-tags' style='margin-right:6px;'></i> <b>Por Categoría</b></div>", unsafe_allow_html=True)
-        if not df_f.empty:
-            cat_totals = df_f.groupby('Categoría')['Valor Neto'].sum().sort_values(ascending=False)
-            cat_totals = cat_totals[cat_totals > 0]
-            max_cat = cat_totals.max() if not cat_totals.empty else 1
-            cat_colors = {'Contratistas P.N.': '#2e7d32', 'Contratistas P.J.': '#1565c0', 'Impuestos': '#e65100',
-                          'Incentivos': '#6a1b9a', 'Comisiones bancarias': '#00695c', 'Gastos de viaje': '#c62828'}
-            cbars_html = ''
-            for cat, val in cat_totals.items():
-                pct = (val / max_cat * 100) if max_cat > 0 else 0
-                pct_total = (val / total_pagado * 100) if total_pagado > 0 else 0
-                color = cat_colors.get(cat, '#43a047')
-                cbars_html += f'''<div class="hbar-item">
-                    <div class="hbar-label" title="{cat}">{cat}</div>
-                    <div class="hbar-track"><div class="hbar-fill" style="width:{pct:.1f}%; background:{color};">{fmt_money(val)}</div></div>
-                    <div class="hbar-pct">{pct_total:.1f}%</div>
-                </div>'''
-            st.markdown(cbars_html, unsafe_allow_html=True)
-
-    # --- CHARTS ---
+    
     st.markdown("---")
-    col_left, col_right = st.columns(2)
-
-    with col_left:
+    
+    # --- EXECUTIVE CHARTS ---
+    col1, col2 = st.columns(2)
+    with col1:
         st.markdown("#### <i class='fas fa-chart-pie section-title'></i> Distribución por Categoría", unsafe_allow_html=True)
-        if not df_f.empty:
-            df_cat = df_f.groupby('Categoría')['Valor Neto'].sum().reset_index()
-            df_cat = df_cat[df_cat['Valor Neto'] != 0].sort_values('Valor Neto', ascending=False)
-            if not df_cat.empty:
-                fig = px.pie(df_cat, values='Valor Neto', names='Categoría', hole=0.45, color_discrete_sequence=COLORS)
-                fig.update_layout(**PLOTLY_LAYOUT, showlegend=True, height=380)
-                fig.update_traces(textposition='inside', textinfo='percent+label',
-                                  hovertemplate='<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}')
-                st.plotly_chart(fig, use_container_width=True)
-
-    with col_right:
-        st.markdown("#### <i class='fas fa-chart-bar section-title'></i> Pagos Mensuales", unsafe_allow_html=True)
-        if not df_f.empty:
-            df_m = df_f.dropna(subset=['Fecha']).copy()
-            if not df_m.empty:
-                df_m['Periodo'] = df_m['Fecha'].dt.to_period('M').astype(str)
-                df_mensual = df_m.groupby('Periodo')['Valor Neto'].sum().reset_index().sort_values('Periodo')
-                fig = px.bar(df_mensual, x='Periodo', y='Valor Neto', color_discrete_sequence=['#43a047'])
-                fig.update_layout(**PLOTLY_LAYOUT, height=380, xaxis_title='Mes', yaxis_title='Monto ($)', xaxis_tickangle=-45)
-                fig.update_traces(hovertemplate='<b>%{x}</b><br>$%{y:,.0f}', marker_line_color='#1b5e20', marker_line_width=1)
-                st.plotly_chart(fig, use_container_width=True)
-
-    # Stacked bar
-    st.markdown("#### <i class='fas fa-layer-group section-title'></i> Evolución Mensual por Categoría", unsafe_allow_html=True)
-    if not df_f.empty:
-        df_m = df_f.dropna(subset=['Fecha']).copy()
-        if not df_m.empty:
-            df_m['Periodo'] = df_m['Fecha'].dt.to_period('M').astype(str)
-            df_mc = df_m.groupby(['Periodo', 'Categoría'])['Valor Neto'].sum().reset_index()
-            fig = px.bar(df_mc, x='Periodo', y='Valor Neto', color='Categoría', color_discrete_sequence=COLORS)
-            fig.update_layout(**PLOTLY_LAYOUT, height=380, barmode='stack', xaxis_title='Mes', yaxis_title='Monto ($)', xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Bank + Cash Flow side by side
-    col_bank, col_cash = st.columns(2)
-    with col_bank:
-        if not df_balances.empty:
-            st.markdown("#### <i class='fas fa-university section-title'></i> Saldo Bancario", unsafe_allow_html=True)
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df_balances['Mes'], y=df_balances['Saldo Final'],
-                                      mode='lines+markers', name='Saldo Final',
-                                      line=dict(color='#81c784', width=3), marker=dict(size=8, color='#2e7d32'),
-                                      fill='tozeroy', fillcolor='rgba(46,125,50,0.1)'))
-            if 'Ingresos' in df_balances.columns:
-                fig.add_trace(go.Bar(x=df_balances['Mes'], y=df_balances['Ingresos'], name='Ingresos', marker_color='rgba(67,160,71,0.5)'))
-            if 'Pagos' in df_balances.columns:
-                fig.add_trace(go.Bar(x=df_balances['Mes'], y=df_balances['Pagos'], name='Pagos', marker_color='rgba(255,183,77,0.5)'))
-            fig.update_layout(**PLOTLY_LAYOUT, height=380, barmode='group', xaxis_title='Mes', yaxis_title='Monto ($)')
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col_cash:
-        if not df_cashflow.empty:
-            st.markdown("#### <i class='fas fa-chart-area section-title'></i> Flujo de Caja (FIDUCOLDEX)", unsafe_allow_html=True)
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df_cashflow['Periodo'], y=df_cashflow['Saldo Proyectado'],
-                                      mode='lines+markers', name='Saldo Proyectado',
-                                      line=dict(color='#66bb6a', width=3, dash='dot'), marker=dict(size=8, color='#43a047'),
-                                      fill='tozeroy', fillcolor='rgba(102,187,106,0.08)'))
-            fig.update_layout(**PLOTLY_LAYOUT, height=380, xaxis_title='Periodo', yaxis_title='Saldo ($)')
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Ingresos vs Egresos
-    if not df_ingresos.empty and not df_f.empty:
-        st.markdown("#### <i class='fas fa-scale-balanced section-title'></i> Ingresos vs Egresos", unsafe_allow_html=True)
-        fig = go.Figure()
-        fig.add_trace(go.Bar(name='Ingresos', x=['Total'], y=[total_ingresos], marker_color='#43a047'))
-        fig.add_trace(go.Bar(name='Egresos', x=['Total'], y=[total_pagado], marker_color='#ff8a65'))
-        fig.add_trace(go.Bar(name='Disponible', x=['Total'], y=[max(0, disponible)], marker_color='#81c784'))
-        fig.update_layout(**PLOTLY_LAYOUT, height=320, barmode='group', yaxis_title='Monto ($)')
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(plot_donut(summary['totals_by_category']), use_container_width=True)
+    with col2:
+        st.markdown("#### <i class='fas fa-gauge section-title'></i> Ejecución Presupuestal", unsafe_allow_html=True)
+        st.plotly_chart(plot_gauge(summary['kpis']['ejecucion']), use_container_width=True)
+    
+    st.markdown("#### <i class='fas fa-layer-group section-title'></i> Ingresos vs Egresos (Evolución)", unsafe_allow_html=True)
+    st.plotly_chart(plot_monthly_evolution(summary['monthly_evolution']), use_container_width=True)
+    
+    st.markdown("#### <i class='fas fa-chart-bar section-title'></i> Egresos por Categoría", unsafe_allow_html=True)
+    st.plotly_chart(plot_stacked_bars(df_cube_f), use_container_width=True)
+    
+    st.markdown("---")
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("#### <i class='fas fa-chart-area section-title'></i> Pareto de Contratistas", unsafe_allow_html=True)
+        st.plotly_chart(plot_pareto(summary['top_contractors']), use_container_width=True)
+    with col4:
+        st.markdown("#### <i class='fas fa-ranking-star section-title'></i> Top 5 Contratistas", unsafe_allow_html=True)
+        st.plotly_chart(plot_top_contractors(summary['top_contractors']), use_container_width=True)
+        
+    if not df_cashflow.empty:
+        st.markdown("---")
+        st.markdown("#### <i class='fas fa-money-bill-transfer section-title'></i> Flujo de Caja (FIDUCOLDEX)", unsafe_allow_html=True)
+        st.plotly_chart(plot_cashflow(df_cashflow), use_container_width=True)
 
     # --- INTERACTIVE ALERTS ---
     st.markdown("---")
@@ -439,8 +377,33 @@ with tab1:
                 'id': 'urgent_30d',
                 'type': 'danger',
                 'icon': 'fa-exclamation-triangle',
-                'title': 'Pagos Urgentes (30 dias)',
-                'msg': f'<b>{len(prox)}</b> pagos vencen en los proximos 30 dias por <b>{fmt_money(prox["Valor Neto"].sum())}</b>. Requiere atencion inmediata.',
+                'title': 'Pagos Urgentes (30 días)',
+                'msg': f'<b>{len(prox)}</b> pagos vencen en los próximos 30 días por <b>{fmt_money(prox["Valor Neto"].sum())}</b>. Requiere atención inmediata.',
+            })
+
+    # Intelligent alerts based on analytical properties
+    ejecucion_pct = summary['kpis']['ejecucion']
+    if ejecucion_pct > 100:
+        alerts.append({
+            'id': 'over_budget', 'type': 'danger', 'icon': 'fa-triangle-exclamation',
+            'title': 'Sobreejecución Presupuestal',
+            'msg': f'La ejecución global supera el 100% (<b>{ejecucion_pct:.1f}%</b>). Se requiere revisión urgente de los egresos.'
+        })
+    elif ejecucion_pct > 90:
+        alerts.append({
+            'id': 'high_budget', 'type': 'warning', 'icon': 'fa-engine-warning',
+            'title': 'Ejecución Alta',
+            'msg': f'La ejecución está cerca del límite (<b>{ejecucion_pct:.1f}%</b>). Controle el gasto en el próximo ciclo.'
+        })
+
+    if not summary['top_contractors'].empty and summary['kpis']['egresos'] > 0:
+        top_row = summary['top_contractors'].iloc[0]
+        pct_concentration = (top_row['total'] / summary['kpis']['egresos']) * 100
+        if pct_concentration > 40:
+             alerts.append({
+                'id': 'concentration_risk', 'type': 'warning', 'icon': 'fa-scale-unbalanced',
+                'title': 'Alta Concentración de Gasto',
+                'msg': f'El proveedor <b>{top_row["contractor"]}</b> concentra el <b>{pct_concentration:.0f}%</b> ({fmt_money(top_row["total"])}) de los egresos filtrados.'
             })
 
     if totals_cp:

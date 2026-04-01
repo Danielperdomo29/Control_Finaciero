@@ -1,0 +1,438 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{tcolorbox}
+\usepackage{tikz}
+
+\geometry{margin=2.5cm, headheight=14pt}
+
+% Colores corporativos
+\definecolor{verde}{HTML}{2E7D32}
+\definecolor{verdeclaro}{HTML}{81C784}
+\definecolor{gris}{HTML}{424242}
+\definecolor{rojo}{HTML}{E53935}
+\definecolor{azul}{HTML}{1565C0}
+\definecolor{naranja}{HTML}{FF8F00}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=verde,
+    urlcolor=azul,
+}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{verde}{\textbf{CONSERVAR PAGA}}}
+\fancyhead[R]{\textcolor{gris}{\small Documentación Técnica v1.0}}
+\fancyfoot[C]{\thepage}
+\fancyfoot[R]{\textcolor{gris}{\small Confidencial}}
+
+\begin{document}
+
+% ==================== PORTADA ====================
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+
+{\Huge\bfseries\textcolor{verde}{CONSERVAR PAGA}}\\[0.5cm]
+{\LARGE\textcolor{gris}{Dashboard de Control Financiero}}\\[2cm]
+
+{\Large\bfseries Guía de Estructura de Archivos Excel}\\[0.3cm]
+{\large Documentación Técnica para la Carga de Datos}\\[3cm]
+
+\begin{tcolorbox}[colback=verde!5, colframe=verde, width=12cm]
+\centering
+\textbf{Versión:} 1.0 \quad | \quad \textbf{Fecha:} Abril 2026\\[0.2cm]
+\textbf{Proyecto:} Control Financiero — Proyecto Ambiental\\
+\textbf{Cliente:} Francia Ester Patiño\\
+\textbf{Desarrollador:} Daniel Enrique Perdomo
+\end{tcolorbox}
+
+\vfill
+\textcolor{gris}{\small Este documento es confidencial y de uso exclusivo del equipo de gestión financiera.}
+\end{titlepage}
+
+% ==================== ÍNDICE ====================
+\tableofcontents
+\newpage
+
+% ==================== SECCIÓN 1 ====================
+\section{Introducción}
+
+El Dashboard de Control Financiero \textbf{CONSERVAR PAGA} procesa archivos Excel con estructura específica para generar indicadores financieros, alertas y reportes en tiempo real. Este documento describe la estructura exacta que debe tener el archivo Excel para que el sistema funcione correctamente.
+
+\begin{tcolorbox}[colback=azul!5, colframe=azul, title=\textbf{Importante}]
+\begin{itemize}[noitemsep]
+    \item El archivo debe ser formato \texttt{.xlsx} (Excel 2007+).
+    \item El tamaño máximo permitido es \textbf{50 MB}.
+    \item Los datos se procesan en memoria y \textbf{nunca se almacenan} en el servidor.
+    \item El nombre sugerido del archivo es: \texttt{ingresos y gastos Proyecto ambiental.xlsx}
+\end{itemize}
+\end{tcolorbox}
+
+% ==================== SECCIÓN 2 ====================
+\section{Resumen de Hojas Requeridas}
+
+El archivo Excel debe contener las siguientes hojas. Cada nombre debe coincidir exactamente (se ignoran espacios al final).
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{|l|c|c|l|}
+\hline
+\rowcolor{verde!15}
+\textbf{Nombre de Hoja} & \textbf{Obligatoria} & \textbf{Fila Header} & \textbf{Contenido} \\
+\hline
+\texttt{INF PAGOS} & \textcolor{rojo}{\textbf{Sí}} & Fila 4 & Pagos a contratistas y proveedores \\
+\hline
+\texttt{GASTOS CP} & No & Fila 1 & Presupuesto por categorías \\
+\hline
+\texttt{INGRESOS CP} & No & Fila 4 & Ingresos del proyecto \\
+\hline
+\texttt{INCENTIVOS} & No & Fila 4 & Pagos de incentivos por ciclo \\
+\hline
+\texttt{GASTOS VIAJE} & No & Fila 11 & Viáticos del equipo \\
+\hline
+\texttt{MOVIMIENTO DB Y CR} & No & Fila 3 & Movimientos bancarios (débito/crédito) \\
+\hline
+\texttt{FIDUCOLDEX} & No & Sin header & Flujo de caja fiduciaria \\
+\hline
+\texttt{OTROS EGRESOS} & No & Sin header & Egresos adicionales \\
+\hline
+\end{tabular}
+\end{center}
+
+% ==================== SECCIÓN 3 ====================
+\section{Detalle por Hoja}
+
+% --- 3.1 INF PAGOS ---
+\subsection{INF PAGOS \textcolor{rojo}{(Obligatoria)}}
+
+Esta es la hoja principal. Contiene todos los pagos realizados a contratistas y proveedores. El header comienza en la \textbf{fila 4}.
+
+\subsubsection{Columnas Requeridas}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|p{4.5cm}|c|p{6.5cm}|}
+\hline
+\rowcolor{verde!15}
+\textbf{Columna} & \textbf{Tipo} & \textbf{Descripción} \\
+\hline
+\endfirsthead
+\hline
+\rowcolor{verde!15}
+\textbf{Columna} & \textbf{Tipo} & \textbf{Descripción} \\
+\hline
+\endhead
+\texttt{Descripción Proveedor} & Texto & Nombre completo del contratista o razón social \\
+\hline
+\texttt{Valor Bruto} & Número & Monto bruto facturado (antes de retenciones) \\
+\hline
+\texttt{Valor Neto} & Número & Monto neto pagado. Si está vacío, se calcula automáticamente \\
+\hline
+\texttt{Fecha de Pago} & Fecha & Fecha del desembolso (formato \texttt{YYYY-MM-DD} o \texttt{DD/MM/YYYY}) \\
+\hline
+\texttt{CONCEPTO} & Texto & Clasificación del pago (ver tabla de conceptos abajo) \\
+\hline
+\texttt{Iva} / \texttt{IVA} & Número & Valor del IVA facturado \\
+\hline
+\texttt{Valor ReteFuente} & Número & Retención en la fuente (Art. 368 E.T.) \\
+\hline
+\texttt{Valor ReteIva} & Número & Retención del IVA (Art. 437-1 E.T.) \\
+\hline
+\texttt{Valor ReteIca} & Número & Retención del ICA (Ley 14/1983) \\
+\hline
+\texttt{Año} / \texttt{Ano} & Número & Año del pago \\
+\hline
+\texttt{Mes} & Número & Mes del pago (1--12) \\
+\hline
+\end{longtable}
+\end{center}
+
+\subsubsection{Cálculo del Valor Neto (Ley Colombiana)}
+
+Si la columna \texttt{Valor Neto} está vacía o es cero, el sistema calcula automáticamente:
+
+\begin{tcolorbox}[colback=naranja!5, colframe=naranja, title=\textbf{Fórmula — Estatuto Tributario (Art. 368)}]
+$$\text{Valor Neto} = \text{Valor Bruto} - (\text{ReteFuente} + \text{ReteIva} + \text{ReteIca})$$
+\end{tcolorbox}
+
+\subsubsection{Valores Válidos para CONCEPTO}
+
+El sistema clasifica automáticamente cada pago según el valor de la columna \texttt{CONCEPTO}:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|}
+\hline
+\rowcolor{verde!15}
+\textbf{Valor en CONCEPTO} & \textbf{Categoría Asignada} \\
+\hline
+\texttt{HONORARIOS P.N.}, \texttt{SERVICIOS P.N.} & Contratistas P.N. \\
+\hline
+\texttt{SERVICIOS P.J.}, \texttt{HONORARIOS P.J.} & Contratistas P.J. \\
+\hline
+\texttt{COMPRAS}, \texttt{ARRENDAMIENTO} & Contratistas P.J. \\
+\hline
+\texttt{IVA}, \texttt{RETEFUENTE}, \texttt{GMF} & Impuestos \\
+\hline
+\texttt{INCENTIVOS} & Incentivos \\
+\hline
+\texttt{COMISION}, \texttt{COMISIONES} & Comisiones bancarias \\
+\hline
+\texttt{VIATICOS} & Gastos de viaje \\
+\hline
+Cualquier otro valor & Otros \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Ejemplo de Datos}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{|l|r|r|l|l|r|r|r|}
+\hline
+\rowcolor{verde!10}
+\textbf{Desc. Proveedor} & \textbf{V. Bruto} & \textbf{V. Neto} & \textbf{Fecha Pago} & \textbf{CONCEPTO} & \textbf{ReteFte} & \textbf{ReteIva} & \textbf{ReteIca} \\
+\hline
+ROJAS PASTRANA E. & 5.000.000 & 4.450.000 & 2024-07-15 & HONORARIOS P.N. & 500.000 & 50.000 & 0 \\
+\hline
+EMPRESA ABC S.A.S & 12.000.000 & & 2024-07-20 & SERVICIOS P.J. & 420.000 & 228.000 & 115.200 \\
+\hline
+BANC. POPULAR & 150.000 & 150.000 & 2024-07-25 & COMISION & 0 & 0 & 0 \\
+\hline
+\end{tabular}
+\end{center}
+
+% --- 3.2 GASTOS CP ---
+\subsection{GASTOS CP}
+
+Contiene el presupuesto aprobado por categorías. El sistema busca filas con las descripciones de categoría para extraer los montos presupuestados.
+
+\subsubsection{Formatos Soportados}
+
+El sistema acepta dos formatos:
+
+\begin{enumerate}[label=\textbf{\alph*)}]
+    \item \textbf{Formato TOTAL}: Filas que contienen palabras como \texttt{TOTAL COSTOS DE PERSONAL}, \texttt{TOTAL INCENTIVOS}, etc.
+    \item \textbf{Formato DESCRIPCION}: Filas con categorías tipo \texttt{A. PERSONAL}, \texttt{B. PAGO DE INCENTIVOS}, \texttt{C. PAGO DE DINAMIZADORES}, etc.
+\end{enumerate}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|}
+\hline
+\rowcolor{verde!15}
+\textbf{Palabra clave buscada} & \textbf{Categoría del Dashboard} \\
+\hline
+\texttt{TOTAL COSTOS DE PERSONAL} / \texttt{A. PERSONAL} & Personal \\
+\hline
+\texttt{TOTAL INCENTIVOS} / \texttt{B. PAGO DE INCENTIVOS} & Incentivos \\
+\hline
+\texttt{TOTAL COSTOS SERVICIOS BANCARIOS} / \texttt{D. COMISI\'{O}N} & Comisiones bancarias \\
+\hline
+\texttt{TOTAL DINAMIZADORES} / \texttt{C. PAGO DE DINAMIZADORES} & Dinamizadores \\
+\hline
+\texttt{TOTAL VIATICOS} / \texttt{E. PAGO DE VIATICOS} & Gastos de viaje \\
+\hline
+\texttt{TOTAL GASTOS DEL PROYECTO} & Total Proyecto \\
+\hline
+\texttt{F. RENDIMIENTOS FINANCIEROS} & Rendimientos financieros \\
+\hline
+\end{tabular}
+\end{center}
+
+% --- 3.3 INGRESOS CP ---
+\subsection{INGRESOS CP}
+
+Registra los ingresos recibidos por el proyecto (desembolsos oficiales, intereses, etc.). Header en \textbf{fila 4}.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|c|p{7cm}|}
+\hline
+\rowcolor{verde!15}
+\textbf{Columna} & \textbf{Tipo} & \textbf{Descripción} \\
+\hline
+\texttt{Fecha} & Fecha & Fecha del ingreso \\
+\hline
+\texttt{CONCEPTO} & Texto & Descripción del ingreso \\
+\hline
+\texttt{VALOR} & Número & Monto del ingreso (ya neto) \\
+\hline
+\end{tabular}
+\end{center}
+
+% --- 3.4 INCENTIVOS ---
+\subsection{INCENTIVOS}
+
+Pagos de incentivos organizados por ciclos. Header en \textbf{fila 4}.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|c|p{7cm}|}
+\hline
+\rowcolor{verde!15}
+\textbf{Columna} & \textbf{Tipo} & \textbf{Descripción} \\
+\hline
+\texttt{PAGO INCENTIVOS} / \texttt{CICLO} & Texto & Identificador del ciclo de pago \\
+\hline
+\texttt{FECHA DE PAGO} & Fecha & Fecha del desembolso \\
+\hline
+\texttt{VALOR PAGO TOTAL} & Número & Monto bruto del incentivo \\
+\hline
+\texttt{ABONO NETO} & Número & Monto neto recibido por el beneficiario \\
+\hline
+\end{tabular}
+\end{center}
+
+% --- 3.5 GASTOS VIAJE ---
+\subsection{GASTOS VIAJE}
+
+Viáticos del equipo de trabajo. Header en \textbf{fila 11}.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|c|p{7cm}|}
+\hline
+\rowcolor{verde!15}
+\textbf{Columna} & \textbf{Tipo} & \textbf{Descripción} \\
+\hline
+\texttt{NOMBRE COMPLETO} & Texto & Nombre del funcionario \\
+\hline
+\texttt{PAGO VIATICOS} & Número & Monto del viático pagado \\
+\hline
+\texttt{FECHA DE PAGO} & Fecha & Fecha del pago \\
+\hline
+\end{tabular}
+\end{center}
+
+% --- 3.6 FIDUCOLDEX ---
+\subsection{FIDUCOLDEX}
+
+Flujo de caja proyectado de la fiduciaria. \textbf{Sin header} (se lee como datos crudos).
+
+\begin{tcolorbox}[colback=verde!5, colframe=verde]
+\textbf{Estructura esperada:}
+\begin{itemize}[noitemsep]
+    \item Fila 3: Nombres de los meses (columnas C a Q).
+    \item Fila con texto \texttt{SALDO FINAL}: Saldos proyectados por mes.
+\end{itemize}
+\end{tcolorbox}
+
+% --- 3.7 MOVIMIENTO DB Y CR ---
+\subsection{MOVIMIENTO DB Y CR}
+
+Movimientos bancarios (débitos y créditos). Header en \textbf{fila 3}. Se utiliza para calcular saldos mensuales.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|c|p{7cm}|}
+\hline
+\rowcolor{verde!15}
+\textbf{Columna} & \textbf{Tipo} & \textbf{Descripción} \\
+\hline
+\texttt{FECHA} & Fecha & Fecha del movimiento bancario \\
+\hline
+\texttt{DEBITO} / \texttt{D\'{E}BITO} & Número & Monto debitado \\
+\hline
+\texttt{CREDITO} / \texttt{CR\'{E}DITO} & Número & Monto acreditado \\
+\hline
+\texttt{SALDO} / \texttt{SALDO FINAL} & Número & Saldo después del movimiento \\
+\hline
+\end{tabular}
+\end{center}
+
+% ==================== SECCIÓN 4 ====================
+\section{Reglas de Normalización Automática}
+
+El sistema aplica las siguientes transformaciones al procesar los datos:
+
+\begin{enumerate}
+    \item \textbf{Textos}: Se convierten a mayúsculas y se eliminan espacios dobles.\\
+    \texttt{"ROJAS~~PASTRANA~~ESTEBAN~"} $\rightarrow$ \texttt{"ROJAS PASTRANA ESTEBAN"}
+    
+    \item \textbf{Fechas}: Se aceptan los formatos \texttt{YYYY-MM-DD}, \texttt{DD/MM/YYYY} y \texttt{YYYY/MM/DD}. Las filas sin fecha válida se descartan.
+    
+    \item \textbf{Valores numéricos}: Se convierten a tipo numérico. Los valores no numéricos se tratan como \texttt{0}.
+    
+    \item \textbf{Categorías}: Se normalizan automáticamente basándose en el campo \texttt{CONCEPTO} de la hoja \texttt{INF PAGOS}.
+\end{enumerate}
+
+% ==================== SECCIÓN 5 ====================
+\section{Seguridad y Confidencialidad}
+
+\begin{tcolorbox}[colback=rojo!5, colframe=rojo, title=\textbf{Política de Protección de Datos}]
+\begin{itemize}[noitemsep]
+    \item \textbf{Procesamiento en memoria}: Los datos del Excel se procesan exclusivamente en la memoria RAM del servidor. No se crean copias en disco.
+    \item \textbf{Sin persistencia}: Al cerrar la sesión o la pestaña del navegador, todos los datos se eliminan de memoria.
+    \item \textbf{Validación de archivo}: Antes de procesar, el sistema verifica la extensión (\texttt{.xlsx}), el tamaño ($\leq$ 50 MB) y la firma binaria del archivo (magic bytes).
+    \item \textbf{Autenticación}: Acceso protegido con \textbf{bcrypt} + \textbf{JWT} (8 horas de validez).
+    \item \textbf{Auditoría}: Cada carga de archivo se registra con hash SHA-256 en \texttt{audit\_log.jsonl}.
+    \item \textbf{OWASP Top 10}: Protección contra fuerza bruta (5 intentos, 5 min lockout), timeout por inactividad (30 min), y sanitización de inputs.
+\end{itemize}
+\end{tcolorbox}
+
+% ==================== SECCIÓN 6 ====================
+\section{Diagrama de Flujo de Procesamiento}
+
+\begin{center}
+\begin{tcolorbox}[colback=verde!5, colframe=verde, width=12cm, title=\textbf{Pipeline de Procesamiento}]
+\begin{enumerate}[noitemsep]
+    \item \textbf{Subida del archivo} --- El usuario carga el archivo \texttt{.xlsx}
+    \item \textbf{Validaci\'{o}n de seguridad} --- Extensi\'{o}n, tama\~{n}o y magic bytes
+    \item \textbf{Carga en memoria} --- \texttt{load\_excel()} lee todas las hojas
+    \item \textbf{Procesamiento} --- \texttt{process\_payments()} consolida pagos
+    \item \textbf{Cubo anal\'{i}tico} --- \texttt{build\_analytics\_cube()} normaliza datos
+    \item \textbf{Filtros din\'{a}micos} --- El usuario selecciona fechas, categor\'{i}as, proveedores
+    \item \textbf{Renderizado} --- KPIs, gr\'{a}ficos y tablas se generan en tiempo real
+\end{enumerate}
+
+\vspace{0.3cm}
+\centering
+\small\textcolor{gris}{Cada paso se ejecuta en memoria. No se almacena nada en disco.}
+\end{tcolorbox}
+\end{center}
+
+% ==================== SECCIÓN 7 ====================
+\section{Preguntas Frecuentes}
+
+\begin{enumerate}
+    \item \textbf{¿Qué pasa si una hoja opcional no existe?}\\
+    El sistema muestra una advertencia en la barra lateral pero continúa funcionando con las hojas disponibles.
+    
+    \item \textbf{¿Puedo usar formato \texttt{.xls} (Excel 97)?}\\
+    Sí, el sistema acepta \texttt{.xls} y \texttt{.xlsx}, pero se recomienda \texttt{.xlsx} para mayor compatibilidad.
+    
+    \item \textbf{¿Qué pasa si las columnas tienen nombres ligeramente diferentes?}\\
+    El sistema busca coincidencias parciales. Por ejemplo, tanto \texttt{Valor ReteFuente} como \texttt{ReteFuente} serán reconocidos.
+    
+    \item \textbf{¿Los datos quedan guardados en el servidor?}\\
+    \textbf{No.} Todo se procesa en memoria (RAM) y se borra al cerrar la sesión.
+    
+    \item \textbf{¿Puedo agregar más hojas al Excel?}\\
+    Sí. Las hojas no reconocidas simplemente se ignoran sin afectar el procesamiento.
+\end{enumerate}
+
+% ==================== PIE ====================
+\vfill
+\begin{center}
+\textcolor{gris}{\rule{0.5\textwidth}{0.5pt}}\\[0.3cm]
+\textcolor{verde}{\textbf{CONSERVAR PAGA}} — Dashboard de Control Financiero\\
+\textcolor{gris}{\small Documento generado automáticamente · Abril 2026}
+\end{center}
+
+\end{document}
