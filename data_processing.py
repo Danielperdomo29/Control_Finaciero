@@ -5,6 +5,7 @@ CONSERVAR PAGA — Dashboard de Control Financiero
 import streamlit as st
 import pandas as pd
 import io
+from datetime import datetime
 
 
 # ==================== HELPERS ====================
@@ -389,7 +390,6 @@ def normalize_date(val):
                 continue
     return pd.NaT
 
-import streamlit as st
 @st.cache_data(show_spinner=False)
 def build_analytics_cube(df_pagos: pd.DataFrame, df_ingresos: pd.DataFrame) -> pd.DataFrame:
     """Builds a normalized, aggregated cube for fast filtering."""
