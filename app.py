@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import os
 
 # Module imports
-from styles import FA_CDN, MAIN_CSS, COLORS, PLOTLY_LAYOUT
+from styles import FA_CDN, MAIN_CSS, COLORS, PLOTLY_LAYOUT, PRIVACY_BANNER
 from auth import is_authenticated, show_login_form, logout
 from security import hash_file, audit_log, validate_excel_structure
 from data_processing import (
@@ -20,7 +20,7 @@ from data_processing import (
 
 # ==================== PAGE CONFIG ====================
 st.set_page_config(
-    page_title="Control Financiero | CONSERVAR PAGA",
+    page_title="Control Financiero | Francia Ester Patino ",
     page_icon="🌿",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -39,7 +39,7 @@ st.markdown(MAIN_CSS, unsafe_allow_html=True)
 with st.sidebar:
     st.markdown("""<div style="text-align:center; margin-bottom:1rem;">
         <i class="fas fa-tree" style="font-size:2rem; color:#66bb6a;"></i>
-        <h4 style="color:#81c784; margin:0.3rem 0 0;">CONSERVAR PAGA</h4>
+        <h4 style="color:#81c784; margin:0.3rem 0 0;">Francia Ester Patino</h4>
         <p style="color:#a5d6a7; font-size:0.75rem; margin:0;">Control Financiero</p>
     </div>""", unsafe_allow_html=True)
 
@@ -76,6 +76,8 @@ warnings = validate_excel_structure(data)
 if warnings:
     for w in warnings:
         st.sidebar.warning(w)
+else:
+    st.sidebar.success("Estructura del archivo validada correctamente")
 
 # ==================== PROCESS DATA ====================
 df_pagos = process_payments(data)
@@ -91,6 +93,9 @@ st.markdown("""
     <p>CONSERVAR PAGA — Proyecto Ambiental | Actualizado: """ + datetime.now().strftime('%d/%m/%Y %H:%M') + """</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ==================== PRIVACY BANNER ====================
+st.markdown(PRIVACY_BANNER, unsafe_allow_html=True)
 
 # ==================== SIDEBAR FILTERS ====================
 with st.sidebar:
