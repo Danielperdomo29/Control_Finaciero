@@ -475,7 +475,7 @@ def get_financial_summary(df_cube: pd.DataFrame, filters: dict) -> dict:
     detail = detail_df.to_dict('records')
     
     # 2. Totales por categoria
-    totals_df = df.groupby('category')['amount'].sum().reset_index()
+    totals_df = df.groupby(['category', 'type'])['amount'].sum().reset_index()
     totals_by_category = totals_df.to_dict('records')
     
     # 3. Evolución mensual (ingresos vs egresos)

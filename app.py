@@ -196,6 +196,8 @@ except Exception:
 # ==================== EXECUTIVE CHARTS (Helpers) ====================
 def plot_donut(totals_by_category):
     df = pd.DataFrame(totals_by_category)
+    if not df.empty and 'type' in df.columns:
+        df = df[df['type'] == 'EGRESO']
     if df.empty: return None
     import plotly.express as px
     fig = px.pie(df, values='amount', names='category', hole=0.6,
@@ -722,22 +724,8 @@ with tab3:
         st.markdown("---")
         
         # --- Evolución Mensual Ingresos vs Egresos ---
-        monthly_data = summary['monthly_by_category']
-        if monthly_data:
-            df_evol = pd.DataFrame(monthly_data)
-            df_ing_m = df_evol[df_evol['type'] == 'INGRESO'].sort_values('month')
-            df_egr_m = df_evol[df_evol['type'] == 'EGRESO'].sort_values('month')
-            
-            fig_evol = go.Figure()
-            if not df_ing_m.empty:
-                fig_evol.add_trace(go.Scatter(x=df_ing_m['month'], y=df_ing_m['total'], mode='lines+markers',
-                    name='Ingresos', line=dict(color='#43a047', width=3), fill='tozeroy', fillcolor='rgba(67,160,71,0.1)'))
-            if not df_egr_m.empty:
-                fig_evol.add_trace(go.Scatter(x=df_egr_m['month'], y=df_egr_m['total'], mode='lines+markers',
-                    name='Egresos', line=dict(color='#e53935', width=3), fill='tozeroy', fillcolor='rgba(229,57,53,0.1)'))
-            fig_evol.update_layout(**PLOTLY_LAYOUT, height=350, title='Evolución Mensual: Ingresos vs Egresos',
-                xaxis_title='Mes', yaxis_title='Monto ($)')
-            st.plotly_chart(fig_evol, use_container_width=True)
+        st.markdown("<h4 style='color:#e0f2e0;'><i class='fas fa-chart-line' style='margin-right:6px;'></i> Evolución Mensual</h4>", unsafe_allow_html=True)
+        st.plotly_chart(plot_monthly_evolution(summary['monthly_evolution']), use_container_width=True)
         
         st.markdown("---")
         
@@ -782,15 +770,15 @@ with tab3:
             st.markdown("<h4 style='color:#e0f2e0;'><i class='fas fa-chart-pie' style='margin-right:6px;'></i> Consolidado por Categoría</h4>", unsafe_allow_html=True)
             totals_data = summary['totals_by_category']
             if totals_data:
-                df_tots = pd.DataFrame(totals_data)
-                df_egresos_only = df_tots[df_tots['type'] == 'EGRESO']
-                if not df_egresos_only.empty:
-                    fig_dona = px.pie(df_egresos_only, values='total', names='category', hole=0.65,
-                        color_discrete_sequence=px.colors.sequential.Greens_r)
-                    fig_dona.update_layout(**PLOTLY_LAYOUT, height=300, showlegend=True)
+                fig_dona = plot_donut(totals_data)
+                if fig_dona:
                     st.plotly_chart(fig_dona, use_container_width=True)
                 
-                df_tots.columns = ['Categoría', 'Tipo', 'Total']
+                df_tots = pd.DataFrame(totals_data)
+                if 'type' in df_tots.columns:
+                    df_tots.columns = ['Categoría', 'Tipo', 'Total']
+                else:
+                    df_tots.columns = ['Categoría', 'Total']
                 df_tots_disp = df_tots.copy()
                 df_tots_disp['Total'] = df_tots_disp['Total'].apply(lambda x: f"${x:,.2f}")
                 st.dataframe(df_tots_disp, use_container_width=True, hide_index=True)
