@@ -16,7 +16,7 @@ from security import hash_file, audit_log, validate_excel_structure, validate_up
 from data_processing import (
     load_excel, process_payments, extract_gastos_cp_totals,
     get_monthly_balances, get_fiducoldex_cashflow, get_ingresos_summary, fmt_money,
-    build_analytics_cube
+    build_analytics_cube, get_financial_summary
 )
 
 # ==================== PAGE CONFIG ====================
@@ -31,6 +31,10 @@ st.set_page_config(
 if not is_authenticated():
     show_login_form()
     st.stop()
+
+# ==================== INIT SESSION STATE ====================
+if 'alertas_manuales' not in st.session_state:
+    st.session_state.alertas_manuales = []
 
 # ==================== LOAD STYLES ====================
 st.markdown(FA_CDN, unsafe_allow_html=True)
@@ -713,62 +717,156 @@ with tab3:
     if df_cube_f.empty:
         st.info("No hay datos para los filtros seleccionados.")
     else:
-        st.markdown("<div style='font-size:0.9rem; color:#a5d6a7; margin-bottom:1rem;'>Mostrando información consolidada y normalizada según los filtros aplicados en la barra lateral.</div>", unsafe_allow_html=True)
+        # Build summary using get_financial_summary
+        summary_filters = {}
+        if date_range and len(date_range) == 2:
+            summary_filters['start_date'] = date_range[0]
+            summary_filters['end_date'] = date_range[1]
+        if selected_proveedores and len(selected_proveedores) < len(all_proveedores):
+            summary_filters['contractors'] = selected_proveedores
+        if selected_cats:
+            summary_filters['categories'] = selected_cats
         
-        # 1. Tabla de Detalle Mensual (Agrupada por Contratista y Mes)
-        st.markdown("<h4 style='color:#e0f2e0; margin-top:1rem;'>Detalle Mensual por Contratista</h4>", unsafe_allow_html=True)
-        detail = df_cube_f.groupby(['contractor', 'year', 'month', 'category', 'type'])['amount'].sum().reset_index()
-        detail['Mes'] = detail.apply(lambda r: f"{int(r['year'])}-{int(r['month']):02d}", axis=1)
-        detail = detail[['contractor', 'Mes', 'category', 'type', 'amount']].sort_values(['contractor', 'Mes'])
-        detail.columns = ['Contratista', 'Mes', 'Categoría', 'Tipo', 'Total']
+        summary = get_financial_summary(df_cube, summary_filters)
+        s_kpis = summary['kpis']
         
-        # Formatear montos para la tabla
-        detail_disp = detail.copy()
-        detail_disp['Total'] = detail_disp['Total'].apply(lambda x: f"${x:,.2f}")
-        st.dataframe(detail_disp, use_container_width=True, hide_index=True)
+        # --- KPI Row: Ingresos / Egresos / Balance ---
+        kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+        with kpi_col1:
+            st.markdown(f'''<div class="metric-card">
+                <div class="metric-icon" style="color:#43a047;"><i class="fas fa-arrow-down"></i></div>
+                <div class="metric-label">Ingresos</div>
+                <div class="metric-value" style="color:#43a047;">{fmt_money(s_kpis['ingresos'])}</div>
+            </div>''', unsafe_allow_html=True)
+        with kpi_col2:
+            st.markdown(f'''<div class="metric-card">
+                <div class="metric-icon" style="color:#e53935;"><i class="fas fa-arrow-up"></i></div>
+                <div class="metric-label">Egresos</div>
+                <div class="metric-value" style="color:#e53935;">{fmt_money(s_kpis['egresos'])}</div>
+            </div>''', unsafe_allow_html=True)
+        with kpi_col3:
+            bal_color = '#43a047' if s_kpis['balance'] >= 0 else '#e53935'
+            st.markdown(f'''<div class="metric-card">
+                <div class="metric-icon" style="color:{bal_color};"><i class="fas fa-scale-balanced"></i></div>
+                <div class="metric-label">Balance</div>
+                <div class="metric-value" style="color:{bal_color};">{fmt_money(s_kpis['balance'])}</div>
+            </div>''', unsafe_allow_html=True)
         
         st.markdown("---")
         
-        # 2. Consolidados por Categoría y Tipo
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("<h4 style='color:#e0f2e0;'>Consolidado por Categoría</h4>", unsafe_allow_html=True)
-            cons_cat = df_cube_f.groupby(['category', 'type'])['amount'].sum().reset_index().sort_values('amount', ascending=False)
-            cons_cat.columns = ['Categoría', 'Tipo', 'Total']
+        # --- Evolución Mensual Ingresos vs Egresos ---
+        monthly_data = summary['monthly_by_category']
+        if monthly_data:
+            df_evol = pd.DataFrame(monthly_data)
+            df_ing_m = df_evol[df_evol['type'] == 'INGRESO'].sort_values('month')
+            df_egr_m = df_evol[df_evol['type'] == 'EGRESO'].sort_values('month')
             
-            # Gráfico de dona para Egresos
-            egresos_cat = cons_cat[cons_cat['Tipo'] == 'EGRESO']
-            if not egresos_cat.empty:
-                fig_cat = px.pie(egresos_cat, values='Total', names='Categoría', hole=0.7, 
-                                 title='Distribución de Egresos', color_discrete_sequence=px.colors.sequential.Greens_r)
-                fig_cat.update_layout(**PLOTLY_LAYOUT)
-                st.plotly_chart(fig_cat, use_container_width=True)
+            fig_evol = go.Figure()
+            if not df_ing_m.empty:
+                fig_evol.add_trace(go.Scatter(x=df_ing_m['month'], y=df_ing_m['total'], mode='lines+markers',
+                    name='Ingresos', line=dict(color='#43a047', width=3), fill='tozeroy', fillcolor='rgba(67,160,71,0.1)'))
+            if not df_egr_m.empty:
+                fig_evol.add_trace(go.Scatter(x=df_egr_m['month'], y=df_egr_m['total'], mode='lines+markers',
+                    name='Egresos', line=dict(color='#e53935', width=3), fill='tozeroy', fillcolor='rgba(229,57,53,0.1)'))
+            fig_evol.update_layout(**PLOTLY_LAYOUT, height=350, title='Evolución Mensual: Ingresos vs Egresos',
+                xaxis_title='Mes', yaxis_title='Monto ($)')
+            st.plotly_chart(fig_evol, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # --- Alertas Manuales del Analista ---
+        if st.session_state.alertas_manuales:
+            st.markdown("<h4 style='color:#ffb74d;'><i class='fas fa-bell' style='margin-right:6px;'></i> Alertas del Analista</h4>", unsafe_allow_html=True)
+            for i, alerta in enumerate(st.session_state.alertas_manuales):
+                tipo_icon = {'Peligro': 'fa-circle-exclamation', 'Advertencia': 'fa-triangle-exclamation', 'Información': 'fa-circle-info'}
+                tipo_color = {'Peligro': '#e53935', 'Advertencia': '#ffb74d', 'Información': '#42a5f5'}
+                icon = tipo_icon.get(alerta['tipo'], 'fa-circle-info')
+                color = tipo_color.get(alerta['tipo'], '#42a5f5')
+                st.markdown(f'''<div style="background:rgba(255,255,255,0.05); border-left:4px solid {color}; padding:0.8rem 1rem; border-radius:8px; margin-bottom:0.5rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <i class="fas {icon}" style="color:{color}; margin-right:8px;"></i>
+                            <b style="color:{color};">{alerta['tipo']}</b>
+                            <span style="color:#a5d6a7; margin-left:8px;">({alerta['contratista']})</span>
+                        </div>
+                        <span style="color:#666; font-size:0.7rem;">{alerta['fecha']}</span>
+                    </div>
+                    <div style="color:#e0f2e0; margin-top:4px; font-size:0.85rem;">{alerta['mensaje']}</div>
+                </div>''', unsafe_allow_html=True)
+            st.markdown("---")
+        
+        # --- Columns: Tabla Detalle + Consolidado ---
+        col_detail, col_cons = st.columns([1.5, 1])
+        
+        with col_detail:
+            st.markdown("<h4 style='color:#e0f2e0;'><i class='fas fa-table' style='margin-right:6px;'></i> Detalle Mensual por Contratista</h4>", unsafe_allow_html=True)
+            detail_data = summary['detail']
+            if detail_data:
+                df_det = pd.DataFrame(detail_data)
+                df_det = df_det.sort_values(['contractor', 'month'])
+                df_det.columns = ['Contratista', 'Mes', 'Categoría', 'Tipo', 'Total']
+                df_det_disp = df_det.copy()
+                df_det_disp['Total'] = df_det_disp['Total'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(df_det_disp, use_container_width=True, hide_index=True, height=400)
+            else:
+                st.info("No hay detalle para los filtros seleccionados.")
+        
+        with col_cons:
+            st.markdown("<h4 style='color:#e0f2e0;'><i class='fas fa-chart-pie' style='margin-right:6px;'></i> Consolidado por Categoría</h4>", unsafe_allow_html=True)
+            totals_data = summary['totals_by_category']
+            if totals_data:
+                df_tots = pd.DataFrame(totals_data)
+                df_egresos_only = df_tots[df_tots['type'] == 'EGRESO']
+                if not df_egresos_only.empty:
+                    fig_dona = px.pie(df_egresos_only, values='total', names='category', hole=0.65,
+                        color_discrete_sequence=px.colors.sequential.Greens_r)
+                    fig_dona.update_layout(**PLOTLY_LAYOUT, height=300, showlegend=True)
+                    st.plotly_chart(fig_dona, use_container_width=True)
                 
-            cons_cat_disp = cons_cat.copy()
-            cons_cat_disp['Total'] = cons_cat_disp['Total'].apply(lambda x: f"${x:,.2f}")
-            st.dataframe(cons_cat_disp, use_container_width=True, hide_index=True)
-            
-        with col2:
-            st.markdown("<h4 style='color:#e0f2e0;'>Ingresos vs Egresos</h4>", unsafe_allow_html=True)
-            cons_type = df_cube_f.groupby('type')['amount'].sum().reset_index()
-            cons_type.columns = ['Tipo', 'Total']
-            
-            if not cons_type.empty:
-                fig_type = px.bar(cons_type, x='Tipo', y='Total', color='Tipo', 
-                                  color_discrete_map={'INGRESO':'#43a047', 'EGRESO':'#e53935'},
-                                  text_auto='.2s', title='Balance Total')
-                fig_type.update_layout(**PLOTLY_LAYOUT)
-                st.plotly_chart(fig_type, use_container_width=True)
-                
-            cons_type_disp = cons_type.copy()
-            cons_type_disp['Total'] = cons_type_disp['Total'].apply(lambda x: f"${x:,.2f}")
-            st.dataframe(cons_type_disp, use_container_width=True, hide_index=True)
+                df_tots.columns = ['Categoría', 'Tipo', 'Total']
+                df_tots_disp = df_tots.copy()
+                df_tots_disp['Total'] = df_tots_disp['Total'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(df_tots_disp, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay consolidado para los filtros seleccionados.")
+
+# ==================== SIDEBAR: ALERTAS MANUALES ====================
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### <i class='fas fa-bell' style='margin-right:6px; color:#ffb74d;'></i> Alertas Manuales", unsafe_allow_html=True)
+    with st.expander("➕ Agregar Alerta"):
+        all_proveedores_ext = ['General'] + all_proveedores
+        tipo_alerta = st.selectbox("Severidad", ["Peligro", "Advertencia", "Información"])
+        contratista_alerta = st.selectbox("Contratista / Proveedor", options=all_proveedores_ext)
+        mensaje_alerta = st.text_area("Mensaje de alerta", placeholder="Ej: Falta RUT del proveedor...")
+        if st.button("Guardar Alerta", use_container_width=True):
+            if mensaje_alerta.strip():
+                st.session_state.alertas_manuales.append({
+                    'tipo': tipo_alerta,
+                    'contratista': contratista_alerta,
+                    'mensaje': mensaje_alerta.strip(),
+                    'fecha': datetime.now().strftime('%Y-%m-%d %H:%M')
+                })
+                audit_log(user, 'MANUAL_ALERT', f'tipo={tipo_alerta} contratista={contratista_alerta}')
+                st.success("Alerta guardada")
+                st.rerun()
+            else:
+                st.warning("Escribe un mensaje para la alerta")
+    
+    # Show count
+    n_alertas = len(st.session_state.alertas_manuales)
+    if n_alertas > 0:
+        st.markdown(f"<div style='text-align:center; color:#ffb74d; font-size:0.8rem;'>{n_alertas} alerta{'s' if n_alertas > 1 else ''} activa{'s' if n_alertas > 1 else ''}</div>", unsafe_allow_html=True)
+        if st.button("🗑️ Limpiar todas", use_container_width=True):
+            st.session_state.alertas_manuales = []
+            st.rerun()
 
 # ==================== FOOTER ====================
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center; opacity:0.5; font-size:0.8rem; padding:1rem;">
     <i class="fas fa-leaf" style="margin-right:6px;"></i> CONSERVAR PAGA — Dashboard de Control Financiero<br>
-    <i class="fas fa-shield-halved" style="margin-right:4px;"></i> Sesión segura · Datos procesados automáticamente desde Excel
+    <i class="fas fa-shield-halved" style="margin-right:4px;"></i> Sesion segura · Ley Colombiana · OWASP Top 10
 </div>
 """, unsafe_allow_html=True)
+

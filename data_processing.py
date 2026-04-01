@@ -148,11 +148,12 @@ def process_payments(data):
             bruto = pd.to_numeric(r.get(col_bruto, 0), errors='coerce') or 0
             neto = pd.to_numeric(r.get(col_neto, 0), errors='coerce')
             if pd.isna(neto) or neto == 0:
-                iva_v = pd.to_numeric(r.get(col_iva, 0), errors='coerce') or 0
+                # Ley Colombiana (Estatuto Tributario Art. 368):
+                # Neto = Bruto - (ReteFuente + ReteIva + ReteIca)
                 rf = pd.to_numeric(r.get(col_retefuente, 0), errors='coerce') or 0
                 ri = pd.to_numeric(r.get(col_reteiva, 0), errors='coerce') or 0
                 rc = pd.to_numeric(r.get(col_reteica, 0), errors='coerce') or 0
-                neto = bruto + iva_v - rf - ri - rc
+                neto = bruto - (rf + ri + rc)
             fecha = pd.to_datetime(r.get(col_fecha), errors='coerce')
             concepto = r.get(col_concepto, '')
             rows.append({
@@ -375,16 +376,17 @@ def normalize_text(val: str) -> str:
     return " ".join(str(val).strip().upper().split())
 
 def normalize_date(val):
-    """Normaliza fechas a datetime.date."""
+    """Normaliza fechas a datetime.date. Soporta multiples formatos."""
     if isinstance(val, datetime):
         return val.date()
     if isinstance(val, pd.Timestamp):
         return val.date()
     if isinstance(val, str):
-        try:
-            return datetime.strptime(val[:10], '%Y-%m-%d').date()
-        except Exception:
-            pass
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y/%m/%d'):
+            try:
+                return datetime.strptime(val[:10], fmt).date()
+            except Exception:
+                continue
     return pd.NaT
 
 import streamlit as st
@@ -427,3 +429,77 @@ def build_analytics_cube(df_pagos: pd.DataFrame, df_ingresos: pd.DataFrame) -> p
             
     df_cube = pd.DataFrame(rows)
     return df_cube
+
+
+def get_financial_summary(df_cube: pd.DataFrame, filters: dict) -> dict:
+    """Aplica filtros al cubo analitico y retorna aggregaciones.
+    
+    Args:
+        df_cube: DataFrame del cubo analitico (build_analytics_cube)
+        filters: dict con start_date, end_date, contractors[], categories[]
+    
+    Returns:
+        dict con keys: detail, totals_by_category, monthly_by_category, kpis
+    """
+    from collections import defaultdict
+    
+    if df_cube.empty:
+        return {'detail': [], 'totals_by_category': [], 'monthly_by_category': [], 'kpis': {'ingresos': 0, 'egresos': 0, 'balance': 0}}
+    
+    df = df_cube.copy()
+    
+    # Apply filters
+    if filters.get('start_date'):
+        df = df[df['date'] >= filters['start_date']]
+    if filters.get('end_date'):
+        df = df[df['date'] <= filters['end_date']]
+    if filters.get('contractors'):
+        pattern = '|'.join([c.upper() for c in filters['contractors']])
+        df = df[df['contractor'].str.contains(pattern, na=False)]
+    if filters.get('categories'):
+        pattern = '|'.join([c.upper() for c in filters['categories']])
+        df = df[df['category'].str.contains(pattern, na=False)]
+    
+    if df.empty:
+        return {'detail': [], 'totals_by_category': [], 'monthly_by_category': [], 'kpis': {'ingresos': 0, 'egresos': 0, 'balance': 0}}
+    
+    # 1. Detalle mensual por contratista (tuplas como llaves)
+    detail_map = defaultdict(float)
+    for _, r in df.iterrows():
+        month_key = f"{int(r['year'])}-{int(r['month']):02d}"
+        key = (r['contractor'], month_key, r['category'], r['type'])
+        detail_map[key] += r['amount']
+    detail = [
+        {'contractor': k[0], 'month': k[1], 'category': k[2], 'type': k[3], 'total': v}
+        for k, v in detail_map.items()
+    ]
+    
+    # 2. Totales por categoria
+    cat_map = defaultdict(float)
+    for _, r in df.iterrows():
+        cat_map[(r['category'], r['type'])] += r['amount']
+    totals_by_category = [
+        {'category': k[0], 'type': k[1], 'total': v}
+        for k, v in cat_map.items()
+    ]
+    
+    # 3. Serie mensual por tipo (para grafico linea)
+    monthly_map = defaultdict(float)
+    for _, r in df.iterrows():
+        month_key = f"{int(r['year'])}-{int(r['month']):02d}"
+        monthly_map[(month_key, r['type'])] += r['amount']
+    monthly_by_category = [
+        {'month': k[0], 'type': k[1], 'total': v}
+        for k, v in monthly_map.items()
+    ]
+    
+    # 4. KPIs
+    total_ingresos = float(df[df['type'] == 'INGRESO']['amount'].sum())
+    total_egresos = float(df[df['type'] == 'EGRESO']['amount'].sum())
+    kpis = {
+        'ingresos': total_ingresos,
+        'egresos': total_egresos,
+        'balance': total_ingresos - total_egresos
+    }
+    
+    return {'detail': detail, 'totals_by_category': totals_by_category, 'monthly_by_category': monthly_by_category, 'kpis': kpis}
