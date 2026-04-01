@@ -31,7 +31,7 @@ def audit_log(user: str, action: str, details: str = ""):
 
 
 def validate_excel_structure(data: dict) -> list:
-    """Valida que el Excel tenga las hojas mínimas requeridas."""
+    """Valida que el Excel tenga las hojas minimas requeridas."""
     warnings = []
     required = ['pagos']
     optional = ['gastos_cp', 'ingresos', 'incentivos', 'viajes', 'movimientos', 'fiducoldex']
@@ -45,6 +45,34 @@ def validate_excel_structure(data: dict) -> list:
         warnings.append(f"Hojas opcionales no encontradas: {', '.join(missing_optional)}")
 
     return warnings
+
+
+def validate_upload(filename: str, file_bytes: bytes) -> tuple:
+    """Valida archivo subido: extension, tamano y magic bytes.
+
+    OWASP A04/A08: Prevenir archivos maliciosos disfrazados de Excel.
+    Returns (is_valid, error_message)
+    """
+    # Check extension
+    allowed_ext = {'.xlsx', '.xls'}
+    ext = ('.' + filename.rsplit('.', 1)[-1].lower()) if '.' in filename else ''
+    if ext not in allowed_ext:
+        return False, f"Tipo de archivo no permitido: {ext}. Solo se aceptan .xlsx y .xls"
+
+    # Check file size (max 50MB)
+    max_size = 50 * 1024 * 1024
+    if len(file_bytes) > max_size:
+        return False, f"Archivo demasiado grande ({len(file_bytes) / 1024 / 1024:.1f} MB). Maximo 50 MB."
+
+    # Check magic bytes (file signature)
+    # XLSX = ZIP format (PK header: 50 4B 03 04)
+    # XLS = OLE2 format (D0 CF 11 E0)
+    xlsx_magic = b'\x50\x4b\x03\x04'
+    xls_magic = b'\xd0\xcf\x11\xe0'
+    if not (file_bytes[:4] == xlsx_magic or file_bytes[:4] == xls_magic):
+        return False, "El archivo no es un Excel valido (firma de archivo incorrecta)"
+
+    return True, ""
 
 
 def sanitize_string(value: str) -> str:

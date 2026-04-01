@@ -12,7 +12,7 @@ import os
 # Module imports
 from styles import FA_CDN, MAIN_CSS, COLORS, PLOTLY_LAYOUT, PRIVACY_BANNER
 from auth import is_authenticated, show_login_form, logout
-from security import hash_file, audit_log, validate_excel_structure
+from security import hash_file, audit_log, validate_excel_structure, validate_upload
 from data_processing import (
     load_excel, process_payments, extract_gastos_cp_totals,
     get_monthly_balances, get_fiducoldex_cashflow, get_ingresos_summary, fmt_money
@@ -59,6 +59,12 @@ default_path = os.path.join(os.path.dirname(__file__), 'ingresos y gastos Proyec
 
 if uploaded:
     file_bytes = uploaded.read()
+    # OWASP A04/A08: Validate file before processing
+    is_valid, err_msg = validate_upload(uploaded.name, file_bytes)
+    if not is_valid:
+        st.error(err_msg)
+        audit_log(user, 'FILE_REJECTED', f"name={uploaded.name} reason={err_msg}")
+        st.stop()
     file_hash = hash_file(file_bytes)
     audit_log(user, 'FILE_UPLOAD', f"name={uploaded.name} hash={file_hash[:16]}...")
     data = load_excel(file_bytes)
