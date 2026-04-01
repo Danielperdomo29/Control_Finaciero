@@ -202,7 +202,8 @@ def plot_donut(totals_by_category):
                  color_discrete_sequence=px.colors.sequential.Greens_r)
     fig.update_traces(textposition='inside', textinfo='percent+label',
                       hovertemplate='<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}')
-    fig.update_layout(**PLOTLY_LAYOUT, showlegend=False, height=300, margin=dict(l=20, r=20, t=20, b=20))
+    fig.update_layout(**PLOTLY_LAYOUT)
+    fig.update_layout(showlegend=False, height=300, margin=dict(l=20, r=20, t=20, b=20))
     return fig
 
 def plot_gauge(ejecucion):
@@ -220,7 +221,8 @@ def plot_gauge(ejecucion):
                 {'range': [30, 70], 'color': "yellow"},
                 {'range': [70, 100], 'color': "green"}],
             'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': 90}}))
-    fig.update_layout(**PLOTLY_LAYOUT, height=250, margin=dict(l=20, r=20, t=40, b=20))
+    fig.update_layout(**PLOTLY_LAYOUT)
+    fig.update_layout(height=250, margin=dict(l=20, r=20, t=40, b=20))
     return fig
 
 def plot_monthly_evolution(monthly_evolution):
@@ -262,7 +264,8 @@ def plot_pareto(top_contractors):
     fig.add_trace(go.Bar(x=df['contractor'], y=df['total'], name='Monto', marker_color='#81c784'))
     fig.add_trace(go.Scatter(x=df['contractor'], y=df['cum_percent'], name='% Acumulado',
                              yaxis='y2', mode='lines+markers', line=dict(color='#ff8a65', width=2)))
-    fig.update_layout(**PLOTLY_LAYOUT,
+    fig.update_layout(**PLOTLY_LAYOUT)
+    fig.update_layout(
         xaxis_title='Contratista',
         yaxis_title='Monto ($)',
         yaxis2=dict(title='% Acumulado', overlaying='y', side='right', range=[0, 110]),
@@ -279,7 +282,8 @@ def plot_top_contractors(top_contractors, top_n=5):
     df['label'] = df['contractor'].apply(lambda x: x[:20] + '...' if len(x) > 20 else x)
     df = df.sort_values('total', ascending=True)
     fig = px.bar(df, y='label', x='total', orientation='h', labels={'total': 'Monto ($)', 'label': 'Contratista'}, color='total', color_continuous_scale='Greens')
-    fig.update_layout(**PLOTLY_LAYOUT, height=400, margin=dict(l=0, r=0))
+    fig.update_layout(**PLOTLY_LAYOUT)
+    fig.update_layout(height=400, margin=dict(l=0, r=0))
     return fig
 
 def plot_cashflow(df_cashflow):
