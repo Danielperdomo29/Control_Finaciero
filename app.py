@@ -953,7 +953,12 @@ with tab3:
             if detail_data:
                 df_det = pd.DataFrame(detail_data)
                 df_det = df_det.sort_values(['contractor', 'month'])
-                df_det.columns = ['Contratista', 'Mes', 'Categoría', 'Tipo', 'Total']
+                # Keep only the columns we need (contractor, month, category, amount)
+                df_det = df_det[['contractor', 'month', 'category', 'amount']].copy()
+                # Rename them to Spanish display names
+                df_det.columns = ['Contratista', 'Mes', 'Categoría', 'Total']
+                # Insert a constant 'Tipo' column (all records are Egresos)
+                df_det.insert(3, 'Tipo', 'Egreso')
                 df_det_disp = df_det.copy()
                 df_det_disp['Total'] = df_det_disp['Total'].apply(lambda x: f"${x:,.2f}")
                 st.dataframe(df_det_disp, use_container_width=True, hide_index=True, height=400)
